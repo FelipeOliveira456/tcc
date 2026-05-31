@@ -1,0 +1,102 @@
+# Copie para config/local.yaml e ajuste repos HF e modelos.
+# Autenticação HF (opcional): huggingface-cli login ou HF_TOKEN no ambiente.
+
+paths:
+  project_root: .
+  data_dir: data
+  models_dir: models
+  checkpoints_dir: checkpoints
+  outputs_dir: outputs
+  rag_index_dir: data/rag_index
+  worfbench_repo: external/WorFBench
+  llama_factory_repo: external/LLaMA-Factory
+
+huggingface:
+  train_repo: zjunlp/WorFBench_train
+  train_filename: worfbench_train.json
+  test_repo: zjunlp/WorFBench_test
+  # Teste no HF = gold_traj/<task>/graph_eval.json (não há worfbench_test.json)
+  test_layout: gold_traj
+  # Token opcional; use variável de ambiente HF_TOKEN se o repo exigir
+  token_env: HF_TOKEN
+
+worfbench:
+  repo_url: https://github.com/zjunlp/WorFBench.git
+  repo_ref: main
+  tasks:
+    - wikihow
+    - toolbench
+    - toolalpaca
+    - lumos
+    - alfworld
+    - webshop
+    - os
+  eval_encoder: all-mpnet-base-v2
+  eval_types:
+    - node
+    - graph
+  inference_api_port: 8000
+
+models:
+  slm:
+    - id: granite-3b
+      hf_id: ibm-granite/granite-4.1-3b
+    - id: qwen35-0.8b
+      hf_id: Qwen/Qwen3.5-0.8B
+    - id: qwen35-2b
+      hf_id: Qwen/Qwen3.5-2B
+    - id: qwen35-4b
+      hf_id: Qwen/Qwen3.5-4B
+    - id: gemma3-1b
+      hf_id: google/gemma-3-1b-it
+    - id: gemma3-4b
+      hf_id: google/gemma-3-4b-it
+    - id: nemotron-nano-4b
+      hf_id: nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+    - id: ministral-3-3b
+      hf_id: mistralai/Ministral-3-3B-Instruct-2512
+  baseline_non_slm:
+    - id: qwen35-27b
+      hf_id: Qwen/Qwen3.5-27B
+      scenarios: [i0]
+
+rag:
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  top_k: 2
+  chunk_fields: [query, workflow]
+  seed: 42
+
+sft:
+  framework: llama-factory
+  template: llama3
+  output_dir: checkpoints/sft
+  num_train_epochs: 3
+  learning_rate: 2.0e-5
+  per_device_train_batch_size: 2
+  seed: 42
+
+scenarios:
+  i0:
+    description: Baseline — system prompt + tarefa, sem RAG, sem SFT
+    use_rag: false
+    use_sft_checkpoint: false
+    worfbench_few_shot_flag: false
+  rag:
+    description: Few-shot via RAG sobre o treino do WorFBench
+    use_rag: true
+    use_sft_checkpoint: false
+    worfbench_few_shot_flag: false
+  sft:
+    description: Modelo ajustado no treino; inferência sem RAG
+    use_rag: false
+    use_sft_checkpoint: true
+    worfbench_few_shot_flag: false
+  sft_rag:
+    description: Modelo ajustado + recuperação no treino
+    use_rag: true
+    use_sft_checkpoint: true
+    worfbench_few_shot_flag: false
+
+reproducibility:
+  seed: 42
+  record_git_sha: true

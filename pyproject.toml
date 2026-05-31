@@ -1,0 +1,10 @@
+# Metadados e config de ferramentas (deps em requirements.txt).
+[project]
+name = "tcc-worfbench"
+version = "0.1.0"
+description = "Orquestração experimental — SLMs no WorFBench/WorFEval"
+requires-python = ">=3.10"
+
+[tool.ruff.lint.per-file-ignores]
+# scripts/ ajustam sys.path antes de importar tcc
+"scripts/*.py" = ["E402"]

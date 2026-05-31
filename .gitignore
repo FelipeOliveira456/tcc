@@ -1,0 +1,29 @@
+# Dados baixados (JSON em data/ — use scripts/download_data.py)
+data/**/*.json
+data/**/.cache/
+
+# Índices e artefatos gerados
+data/rag_index/
+models/
+checkpoints/
+outputs/
+external/
+
+# Config local
+config/local.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Ferramentas
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Hugging Face / SO
+.cache/
+.DS_Store

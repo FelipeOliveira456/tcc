@@ -1,0 +1,13 @@
+# Copie para config/local.yaml e ajuste IDs Hugging Face dos modelos.
+
+paths:
+  project_root: .
+
+huggingface:
+  train_repo: zjunlp/WorFBench_train
+  test_repo: zjunlp/WorFBench_test
+
+models:
+  slm:
+    - id: granite-3b
+      hf_id: ibm-granite/granite-4.1-3b
