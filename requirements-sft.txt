@@ -1,10 +1,11 @@
-# Opcional — ambiente de fine-tune (QLoRA / LLaMA-Factory).
-# pip install -r requirements.txt -r requirements-sft.txt
-torch>=2.2
-transformers>=4.51
-peft>=0.12
-accelerate>=0.33
-bitsandbytes>=0.43
-datasets>=2.19
-# LLaMA-Factory ≥0.9.5 (templates qwen3_5, gemma3, granite4, ministral3)
-llamafactory>=0.9.5
+# Fine-tune (QLoRA / LLaMA-Factory) — instale DEPOIS de requirements.txt:
+#   pip install -r requirements.txt
+#   pip install -r requirements-sft.txt
+#
+# Requer Python 3.11 ou 3.12 (não use 3.13/3.14 — torch/llamafactory quebram o resolver).
+# GPU NVIDIA: se torch sem CUDA, reinstale de https://pytorch.org antes do finetune.
+#
+# llamafactory puxa torch, transformers, peft, accelerate, trl, datasets etc.
+# Não liste esses pacotes aqui com >= solto — pip entra em resolution-too-deep.
+llamafactory==0.9.5
+bitsandbytes>=0.45.0

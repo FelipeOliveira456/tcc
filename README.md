@@ -157,7 +157,14 @@ inference:
 
 ## Fine-tune (SFT / QLoRA)
 
-Dependências extras: `pip install -r requirements-sft.txt` (inclui **LLaMA-Factory** ≥0.9.5, bitsandbytes).
+Dependências extras (dois passos, ver [Setup](#setup)):
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-sft.txt
+```
+
+Inclui **LLaMA-Factory** 0.9.5 (puxa torch, transformers, peft, etc.) e **bitsandbytes** para QLoRA.
 
 Todos os SLMs do recorte usam **LLaMA-Factory** com template por modelo em `config/default.yaml`
 (`qwen3_5_nothink`, `granite4`, `gemma3`, `ministral3`).
@@ -229,12 +236,23 @@ Exemplo: `python scripts/download_model.py --model qwen35-4b`
 
 ## Setup
 
+Requer **Python 3.11 ou 3.12** (não use 3.14 — `pip install` do SFT falha com `resolution-too-deep`).
+
 ```bash
 cd tcc
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
+python --version   # deve ser 3.11.x ou 3.12.x
+
 pip install -r requirements.txt
-# fine-tune (GPU): pip install -r requirements-sft.txt
+# fine-tune (GPU): em um segundo passo, para o resolver não explodir
+pip install -r requirements-sft.txt
 # Ollama: instale separadamente em https://ollama.com
+```
+
+Se o `pip install -r requirements-sft.txt` ainda falhar, instale só o LLaMA-Factory (ele puxa o resto):
+
+```bash
+pip install "llamafactory==0.9.5" "bitsandbytes>=0.45.0"
 ```
 
 Mais detalhes (Ollama, LangChain, QLoRA): [`docs/stack.md`](docs/stack.md).
