@@ -24,11 +24,21 @@ def main() -> None:
         action="store_true",
         help="Só gera dataset + YAML em outputs/manifests/, sem treinar",
     )
+    parser.add_argument(
+        "--export-merged",
+        action="store_true",
+        help="Após treino LLaMA-Factory, merge LoRA em checkpoints/<model>/merged/",
+    )
     args = parser.parse_args()
     cfg = load_config(args.config)
     get_model_spec(cfg, args.model)
 
-    out = run_finetune(cfg, args.model, dry_run=args.dry_run)
+    out = run_finetune(
+        cfg,
+        args.model,
+        dry_run=args.dry_run,
+        export_merged=args.export_merged,
+    )
     if args.dry_run:
         print(f"[dry-run] manifest/YAML com stamp em outputs/manifests/finetune_{args.model}_*")
         print(f"checkpoint previsto: {out}")

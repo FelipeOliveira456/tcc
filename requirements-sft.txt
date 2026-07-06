@@ -1,6 +1,10 @@
 # Opcional — ambiente de fine-tune (QLoRA / LLaMA-Factory).
 # pip install -r requirements.txt -r requirements-sft.txt
 torch>=2.2
-transformers>=4.44
+transformers>=4.51
 peft>=0.12
 accelerate>=0.33
+bitsandbytes>=0.43
+datasets>=2.19
+# LLaMA-Factory ≥0.9.5 (templates qwen3_5, gemma3, granite4, ministral3)
+llamafactory>=0.9.5

@@ -54,23 +54,29 @@ models:
   slm:
     - id: granite-3b
       hf_id: ibm-granite/granite-4.1-3b
+      sft_template: granite4
     - id: qwen35-0.8b
       hf_id: Qwen/Qwen3.5-0.8B
+      sft_template: qwen3_5_nothink
     - id: qwen35-2b
       hf_id: Qwen/Qwen3.5-2B
+      sft_template: qwen3_5_nothink
     - id: qwen35-4b
       hf_id: Qwen/Qwen3.5-4B
+      sft_template: qwen3_5_nothink
     - id: gemma3-1b
       hf_id: google/gemma-3-1b-it
+      sft_template: gemma3
     - id: gemma3-4b
       hf_id: google/gemma-3-4b-it
-    - id: nemotron-nano-4b
-      hf_id: nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+      sft_template: gemma3
     - id: ministral-3-3b
       hf_id: mistralai/Ministral-3-3B-Instruct-2512
+      sft_template: ministral3
   baseline_non_slm:
     - id: qwen35-27b
       hf_id: Qwen/Qwen3.5-27B
+      sft_template: qwen3_5_nothink
       scenarios: [i0]
 
 rag:
@@ -81,11 +87,20 @@ rag:
 
 sft:
   framework: llama-factory
-  template: llama3
+  # template por modelo em models.slm[].sft_template (não use llama3 global)
   output_dir: checkpoints/sft
   num_train_epochs: 3
   learning_rate: 2.0e-5
   per_device_train_batch_size: 2
+  gradient_accumulation_steps: 4
+  cutoff_len: 8192
+  quantization_bit: 4
+  lora_rank: 16
+  lora_alpha: 32
+  logging_steps: 10
+  save_steps: 500
+  warmup_ratio: 0.1
+  preprocessing_num_workers: 4
   seed: 42
 
 scenarios:
