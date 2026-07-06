@@ -7,7 +7,7 @@ Combinações (--model obrigatório):
   --finetuned      SFT  — checkpoint, sem RAG
   --finetuned --rag SFT+RAG
 
-Plugue Ollama/LangChain em tcc/backends (ver docs/stack.md).
+Requer Ollama com o modelo importado (ver config/default.yaml → inference.ollama).
 """
 
 from __future__ import annotations
@@ -19,18 +19,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tcc.backends.ollama_inference import make_generate_fn, resolve_ollama_model_name
 from tcc.config import load_config
 from tcc.download.worfbench_data import list_test_tasks
 from tcc.inference.runner import run_inference
 from tcc.models_registry import get_model_spec
-from tcc.paths import prediction_path
-
-
-def _stub_generate(messages, model_id: str, finetuned: bool) -> str:
-    raise NotImplementedError(
-        "Conecte Ollama/LangChain em infer.py / tcc.backends. "
-        "Entrada: messages. Saída: texto do workflow."
-    )
+from tcc.paths import inference_run_meta_path, prediction_path
+from tcc.run_stamp import run_stamp
 
 
 def main() -> None:
@@ -50,23 +45,30 @@ def main() -> None:
     cfg = load_config(args.config)
     get_model_spec(cfg, args.model)
 
+    ollama_name = resolve_ollama_model_name(cfg, args.model, args.finetuned)
+    stamp = run_stamp()
+
     if args.dry_run:
         tasks = [args.task] if args.task else list_test_tasks(cfg)
-        print(f"[dry-run] infer model={args.model} rag={args.rag} finetuned={args.finetuned}")
+        print(f"[dry-run] infer model={args.model} ollama={ollama_name} stamp={stamp} rag={args.rag}")
         for t in tasks:
-            print(f"  -> {prediction_path(cfg, args.model, finetuned=args.finetuned, rag=args.rag, task=t)}")
+            print(
+                f"  -> {prediction_path(cfg, args.model, finetuned=args.finetuned, rag=args.rag, task=t, stamp=stamp)}"
+            )
+        print(f"  meta -> {inference_run_meta_path(cfg, args.model, stamp)}")
         return
 
+    generate_fn = make_generate_fn(cfg)
     out = run_inference(
         cfg,
         args.model,
         finetuned=args.finetuned,
         use_rag=args.rag,
-        generate_fn=_stub_generate,
+        generate_fn=generate_fn,
         tasks=[args.task] if args.task else None,
         limit=args.limit,
     )
-    print(f"predições em: {out.parent}")
+    print(f"predições em: {out.parent} (ollama={ollama_name}, stamp no nome do arquivo)")
 
 
 if __name__ == "__main__":

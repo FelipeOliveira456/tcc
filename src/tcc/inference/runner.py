@@ -6,9 +6,12 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
+from tqdm import tqdm
+
 from tcc.download.worfbench_data import list_test_tasks
-from tcc.paths import prediction_path, test_gold
+from tcc.paths import inference_run_meta_path, prediction_path, test_gold
 from tcc.rag.vector_store import retrieve
+from tcc.run_stamp import run_stamp, utc_now_iso
 
 
 def _final_user_message(conversations: list[dict]) -> str:
@@ -68,6 +71,9 @@ def run_inference(
     Grava um JSON por tarefa no formato esperado pelo WorFEval.
     """
     task_list = tasks or list_test_tasks(cfg)
+    stamp = run_stamp()
+    started_at = utc_now_iso()
+    outputs: dict[str, str] = {}
 
     for task in task_list:
         gold_path = test_gold(cfg, task)
@@ -76,14 +82,41 @@ def run_inference(
 
         preds = []
         subset = gold_data[:limit] if limit else gold_data
-        for item in subset:
+        desc = f"{task} ({model_id})"
+        for item in tqdm(subset, desc=desc, unit="ex"):
             messages = build_prompt_messages(item, use_rag=use_rag, cfg=cfg)
             workflow = generate_fn(messages, model_id, finetuned)
             preds.append({"query": item, "workflow": workflow})
 
-        out = prediction_path(cfg, model_id, finetuned=finetuned, rag=use_rag, task=task)
+        out = prediction_path(
+            cfg, model_id, finetuned=finetuned, rag=use_rag, task=task, stamp=stamp
+        )
         out.parent.mkdir(parents=True, exist_ok=True)
         with out.open("w", encoding="utf-8") as f:
             json.dump(preds, f, indent=2, ensure_ascii=False)
+        outputs[task] = str(out)
 
-    return prediction_path(cfg, model_id, finetuned=finetuned, rag=use_rag, task=task_list[0])
+    finished_at = utc_now_iso()
+    meta_path = inference_run_meta_path(cfg, model_id, stamp)
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    with meta_path.open("w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "stamp": stamp,
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "model_id": model_id,
+                "finetuned": finetuned,
+                "rag": use_rag,
+                "limit": limit,
+                "tasks": task_list,
+                "predictions": outputs,
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return prediction_path(
+        cfg, model_id, finetuned=finetuned, rag=use_rag, task=task_list[0], stamp=stamp
+    )

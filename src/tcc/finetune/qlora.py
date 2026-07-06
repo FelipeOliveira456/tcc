@@ -8,7 +8,8 @@ from typing import Any
 
 from tcc.config import resolve_path
 from tcc.models_registry import get_model_spec
-from tcc.paths import checkpoint_dir, model_dir, train_json
+from tcc.paths import checkpoint_dir, finetune_manifest_paths, model_dir, train_json
+from tcc.run_stamp import run_stamp, utc_now_iso
 
 
 def prepare_sharegpt_dataset(cfg: dict[str, Any], model_id: str) -> Path:
@@ -34,12 +35,14 @@ def prepare_sharegpt_dataset(cfg: dict[str, Any], model_id: str) -> Path:
     return out
 
 
-def build_llamafactory_yaml(cfg: dict[str, Any], model_id: str, dataset_path: Path) -> Path:
+def build_llamafactory_yaml(
+    cfg: dict[str, Any], model_id: str, dataset_path: Path, stamp: str
+) -> Path:
     """YAML de referência para QLoRA (loss na última resposta = mask_history)."""
     sft = cfg.get("sft", {})
-    out = resolve_path(cfg, "outputs_dir") / "manifests" / f"finetune_{model_id}.yaml"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    yaml_text = f"""# Gerado pelo TCC — ajuste paths e rode: llamafactory-cli train {out.name}
+    yaml_path, _ = finetune_manifest_paths(cfg, model_id, stamp)
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    yaml_text = f"""# Gerado pelo TCC — {stamp}
 model_name_or_path: {model_dir(cfg, model_id)}
 dataset: {dataset_path}
 template: {sft.get('template', 'llama3')}
@@ -56,27 +59,37 @@ train_on_prompt: false
 mask_history: true
 # Loss só na última mensagem assistant (7ª), contexto = 6 primeiras.
 """
-    out.write_text(yaml_text, encoding="utf-8")
-    return out
+    yaml_path.write_text(yaml_text, encoding="utf-8")
+    return yaml_path
 
 
 def run_finetune(cfg: dict[str, Any], model_id: str, *, dry_run: bool = False) -> Path:
+    stamp = run_stamp()
+    started_at = utc_now_iso()
     dataset = prepare_sharegpt_dataset(cfg, model_id)
-    yaml_path = build_llamafactory_yaml(cfg, model_id, dataset)
+    yaml_path = build_llamafactory_yaml(cfg, model_id, dataset, stamp)
+    _, manifest_path = finetune_manifest_paths(cfg, model_id, stamp)
     manifest = {
+        "stamp": stamp,
+        "started_at": started_at,
         "model_id": model_id,
         "hf_id": get_model_spec(cfg, model_id)["hf_id"],
         "dataset": str(dataset),
         "yaml": str(yaml_path),
         "checkpoint_dir": str(checkpoint_dir(cfg, model_id)),
+        "dry_run": dry_run,
         "note": "Integrar Unsloth ou llamafactory-cli train; não usa Ollama.",
     }
-    manifest_path = yaml_path.with_suffix(".json")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if dry_run:
+        manifest["finished_at"] = utc_now_iso()
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         return checkpoint_dir(cfg, model_id)
 
     import subprocess
 
     subprocess.run(["llamafactory-cli", "train", str(yaml_path)], check=True)
+    manifest["finished_at"] = utc_now_iso()
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return checkpoint_dir(cfg, model_id)

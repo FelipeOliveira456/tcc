@@ -30,7 +30,7 @@ def main() -> None:
 
     out = run_finetune(cfg, args.model, dry_run=args.dry_run)
     if args.dry_run:
-        print(f"[dry-run] manifest/YAML em outputs/manifests/finetune_{args.model}.*")
+        print(f"[dry-run] manifest/YAML com stamp em outputs/manifests/finetune_{args.model}_*")
         print(f"checkpoint previsto: {out}")
     else:
         print(f"checkpoint: {out}")

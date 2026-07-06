@@ -37,6 +37,19 @@ worfbench:
     - graph
   inference_api_port: 8000
 
+inference:
+  engine: ollama
+  ollama:
+    base_url: http://127.0.0.1:11434
+    timeout_s: 600
+    temperature: 0.0
+    sft_suffix: "-sft"
+    # Opcional por modelo:
+    # models:
+    #   qwen35-4b:
+    #     base: qwen35-4b
+    #     sft: qwen35-4b-sft
+
 models:
   slm:
     - id: granite-3b

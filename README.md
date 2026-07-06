@@ -41,6 +41,31 @@ Rodar o script **já executa** a ação. Use `--dry-run` só para inspecionar ca
 
 Sem few-shot fixo do WorFBench. Prompt de teste = **system + user** (+ bloco RAG se `--rag`).
 
+## Inferência (Ollama)
+
+`infer.py` chama o **Ollama** local (`POST /api/chat`). Não usa LangChain nem `transformers` na geração.
+
+1. Instale e inicie o [Ollama](https://ollama.com).
+2. Importe o modelo com o **mesmo nome** do `--model` (ex.: `ollama pull qwen35-4b` ou `ollama create` a partir dos pesos HF).
+3. Com `--finetuned`, o nome padrão é `{model}-sft` (ex.: `qwen35-4b-sft`). Ajuste em `config/default.yaml` → `inference.ollama` ou `config/backends.yaml`.
+
+```bash
+python scripts/infer.py --model qwen35-4b --limit 2   # piloto
+python scripts/infer.py --model qwen35-4b --dry-run  # só caminhos
+```
+
+Config: `inference.ollama.base_url`, `timeout_s`, `temperature`.
+
+## Marcadores de tempo (inferência e fine-tune)
+
+Cada execução carimba os arquivos com `YYYYMMDD_HHMMSS` (UTC):
+
+- **`infer.py`**: `outputs/predictions/<model>/<task>/graph_eval_{cenário}_{stamp}.json` + `outputs/predictions/<model>/run_{stamp}.json` (`started_at`, `finished_at`, tarefas, caminhos).
+- **`finetune.py`**: `outputs/manifests/finetune_{model}_{stamp}.yaml` + `.json` (`stamp`, `started_at`, `finished_at`).
+- **`worfeval.py`**: usa automaticamente a predição **mais recente** com stamp.
+
+Assim múltiplas rodadas não se sobrescrevem.
+
 ## RAG determinístico
 
 - Embedding fixo em `config/default.yaml` (`rag.embedding_model`, `rag.seed`)
@@ -50,7 +75,7 @@ Sem few-shot fixo do WorFBench. Prompt de teste = **system + user** (+ bloco RAG
 ## WorFEval (como funciona)
 
 1. **`infer.py`** grava, por tarefa, um JSON com lista `{query, workflow}`.
-2. **`worfeval.py`** chama `external/WorFBench/node_eval.py --task eval_workflow`.
+2. **`worfeval.py`** chama `external/WorFBench/node_eval.py --task eval_workflow` sobre a predição mais recente (com stamp).
 3. Compara predição vs `data/test/<task>/graph_eval.json` com **sentence-transformers** + matching de grafo.
 4. Saída: precision, recall, F1 em `outputs/eval_results/`.
 

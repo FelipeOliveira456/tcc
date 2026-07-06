@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
-from tcc.paths import prediction_path, test_gold
+from tcc.paths import latest_prediction_path, test_gold
 from tcc.setup.worfbench_repo import clone_worfbench
 
 
@@ -33,7 +33,7 @@ def run_eval_task(
     repo = resolve_path(cfg, "worfbench_repo")
     node_eval = repo / "node_eval.py"
     wb = cfg.get("worfbench", {})
-    pred = prediction_path(cfg, model_id, finetuned=finetuned, rag=rag, task=task)
+    pred = latest_prediction_path(cfg, model_id, finetuned=finetuned, rag=rag, task=task)
     gold = test_gold(cfg, task)
     if finetuned and rag:
         tag = "sft_rag"

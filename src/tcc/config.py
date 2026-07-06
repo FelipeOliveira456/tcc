@@ -10,6 +10,7 @@ import yaml
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "default.yaml"
 LOCAL_CONFIG = Path(__file__).resolve().parents[2] / "config" / "local.yaml"
+BACKENDS_CONFIG = Path(__file__).resolve().parents[2] / "config" / "backends.yaml"
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -34,6 +35,11 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
         with LOCAL_CONFIG.open(encoding="utf-8") as f:
             local = yaml.safe_load(f) or {}
         cfg = _deep_merge(cfg, local)
+
+    if BACKENDS_CONFIG.exists():
+        with BACKENDS_CONFIG.open(encoding="utf-8") as f:
+            backends = yaml.safe_load(f) or {}
+        cfg = _deep_merge(cfg, backends)
 
     # Paths relativos ao diretório do projeto (raiz do repo tcc).
     project_root = Path(cfg.get("paths", {}).get("project_root", "."))
