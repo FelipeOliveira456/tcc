@@ -43,6 +43,7 @@ inference:
     base_url: http://127.0.0.1:11434
     timeout_s: 600
     temperature: 0.0
+    num_predict: 4096
     sft_suffix: "-sft"
     # Opcional por modelo:
     # models:

@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
 from tcc.paths import latest_prediction_path, test_gold
-from tcc.setup.worfbench_repo import clone_worfbench
+from tcc.setup.worfbench_repo import clone_worfbench, install_worfbench_eval_deps
 
 
 def ensure_worfbench(cfg: dict[str, Any], *, install_deps: bool = False) -> Path:
     repo = clone_worfbench(cfg, force=False)
     if install_deps:
-        req = repo / "requirements.txt"
-        if req.exists():
-            subprocess.run(["pip", "install", "-r", str(req)], check=True)
+        install_worfbench_eval_deps()
     return repo
 
 
@@ -53,7 +52,7 @@ def run_eval_task(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "python",
+        sys.executable,
         str(node_eval),
         "--task",
         "eval_workflow",

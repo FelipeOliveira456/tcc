@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ def run_worfeval(
     out = eval_output_path(cfg, model_id, task, scenario, eval_type)
 
     cmd = [
-        "python",
+        sys.executable,
         str(node_eval),
         "--task",
         "eval_workflow",

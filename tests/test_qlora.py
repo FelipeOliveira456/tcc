@@ -6,6 +6,12 @@ import json
 import sys
 from pathlib import Path
 
+import importlib.util
+import unittest
+
+if importlib.util.find_spec("pytest") is None:
+    raise unittest.SkipTest("pytest required — pip install -r requirements-dev.txt")
+
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,6 +109,20 @@ def test_modelfile_generation(cfg):
     assert "FROM" in text
     assert "qwen35-0.8b" in text
     assert "PARAMETER temperature 0.0" in text
+
+
+def test_ollama_create_argv(cfg, tmp_path: Path):
+    from tcc.backends.ollama_modelfile import ollama_create_argv
+
+    mf = tmp_path / "Modelfile"
+    mf.write_text("FROM .\n", encoding="utf-8")
+    argv = ollama_create_argv(cfg, "qwen35-0.8b", finetuned=False, modelfile=mf)
+    assert argv[:3] == ["ollama", "create", "qwen35-0.8b"]
+    assert argv[-2:] == ["-f", str(mf)]
+    argv_q = ollama_create_argv(
+        cfg, "qwen35-0.8b", finetuned=False, modelfile=mf, quantize="q4_K_M"
+    )
+    assert argv_q == ["ollama", "create", "qwen35-0.8b", "-f", str(mf), "--quantize", "q4_K_M"]
 
 
 def test_registry_templates_from_default_config():

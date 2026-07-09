@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from tcc.backends.ollama_modelfile import (
+    ollama_create_argv,
     ollama_create_command,
     write_modelfile,
 )
@@ -61,10 +62,17 @@ def main() -> None:
         modelfile=modelfile,
         quantize=args.quantize,
     )
+    argv = ollama_create_argv(
+        cfg,
+        args.model,
+        finetuned=args.finetuned,
+        modelfile=modelfile,
+        quantize=args.quantize,
+    )
     print(f"Modelfile: {modelfile}")
     print(cmd)
     if args.run:
-        subprocess.run(cmd, shell=True, check=True)
+        subprocess.run(argv, check=True)
 
 
 if __name__ == "__main__":

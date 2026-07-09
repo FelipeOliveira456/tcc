@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +75,7 @@ def run_generation_for_scenario(
         _prepare_rag_augmented_gold(cfg, gold, pred.with_suffix(".rag_prompt.json"), task)
 
     cmd = [
-        "python",
+        sys.executable,
         str(node_eval),
         "--task",
         "gen_workflow",

@@ -6,3 +6,4 @@ tqdm==4.67.3
 numpy>=1.26
 datasets>=2.20,<4.1
 sentence-transformers>=3.0
+networkx>=3.0

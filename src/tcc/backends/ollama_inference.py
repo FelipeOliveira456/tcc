@@ -14,6 +14,7 @@ class OllamaConfig:
     base_url: str = "http://127.0.0.1:11434"
     timeout_s: float = 600.0
     temperature: float = 0.0
+    num_predict: int = 4096
 
 
 def ollama_config_from_cfg(cfg: dict[str, Any]) -> OllamaConfig:
@@ -22,6 +23,7 @@ def ollama_config_from_cfg(cfg: dict[str, Any]) -> OllamaConfig:
         base_url=block.get("base_url", "http://127.0.0.1:11434"),
         timeout_s=float(block.get("timeout_s", 600)),
         temperature=float(block.get("temperature", 0.0)),
+        num_predict=int(block.get("num_predict", 4096)),
     )
 
 
@@ -56,7 +58,11 @@ def chat_completion(
         "model": model,
         "messages": messages,
         "stream": False,
-        "options": {"temperature": ollama.temperature},
+        "think": False,
+        "options": {
+            "temperature": ollama.temperature,
+            "num_predict": ollama.num_predict,
+        },
     }
     req = Request(
         url,

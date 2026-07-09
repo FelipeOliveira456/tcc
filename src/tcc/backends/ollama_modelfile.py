@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
-from tcc.models_registry import get_model_spec
 from tcc.paths import checkpoint_dir, model_dir
 
 
@@ -73,6 +72,29 @@ def write_modelfile(
     return path
 
 
+def resolve_ollama_create_name(cfg: dict[str, Any], model_id: str, *, finetuned: bool) -> str:
+    ollama = cfg.get("inference", {}).get("ollama", {})
+    per_model = (ollama.get("models") or {}).get(model_id, {})
+    if finetuned:
+        return per_model.get("sft") or f"{model_id}{ollama.get('sft_suffix', '-sft')}"
+    return per_model.get("base") or model_id
+
+
+def ollama_create_argv(
+    cfg: dict[str, Any],
+    model_id: str,
+    *,
+    finetuned: bool,
+    modelfile: Path,
+    quantize: str | None = None,
+) -> list[str]:
+    name = resolve_ollama_create_name(cfg, model_id, finetuned=finetuned)
+    cmd = ["ollama", "create", name, "-f", str(modelfile)]
+    if quantize:
+        cmd.extend(["--quantize", quantize])
+    return cmd
+
+
 def ollama_create_command(
     cfg: dict[str, Any],
     model_id: str,
@@ -81,11 +103,7 @@ def ollama_create_command(
     modelfile: Path,
     quantize: str | None = None,
 ) -> str:
-    ollama = cfg.get("inference", {}).get("ollama", {})
-    per_model = (ollama.get("models") or {}).get(model_id, {})
-    if finetuned:
-        name = per_model.get("sft") or f"{model_id}{ollama.get('sft_suffix', '-sft')}"
-    else:
-        name = per_model.get("base") or model_id
-    qflag = f" --quantize {quantize}" if quantize else ""
-    return f"ollama create {name}{qflag} -f {modelfile}"
+    argv = ollama_create_argv(
+        cfg, model_id, finetuned=finetuned, modelfile=modelfile, quantize=quantize
+    )
+    return " ".join(argv)

@@ -3,9 +3,10 @@
 
 Como funciona o WorFEval
 ----------------------
-1. Você gera predições com infer.py → JSON por tarefa:
-     outputs/predictions/<model>/<task>/graph_eval_{i0|rag|sft|sft_rag}.json
+1. Você gera predições com infer.py → JSON por tarefa (com stamp):
+     outputs/predictions/<model>/<task>/graph_eval_{i0|rag|sft|sft_rag}_YYYYMMDD_HHMMSS.json
    Cada item: {"query": <exemplo gold>, "workflow": "<texto gerado pelo LLM>"}
+   O eval usa automaticamente a predição mais recente.
 
 2. O gold de teste está em:
      data/test/<task>/graph_eval.json
@@ -38,8 +39,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from tcc.config import load_config
 from tcc.download.worfbench_data import list_test_tasks
 from tcc.models_registry import get_model_spec
-from tcc.paths import prediction_path
+from tcc.paths import latest_prediction_path
 from tcc.worfeval.runner import ensure_worfbench, run_eval_task
+from tcc.setup.worfbench_repo import install_worfbench_eval_deps
 
 
 def main() -> None:
@@ -76,6 +78,7 @@ def main() -> None:
     print(f"WorFBench: {repo}")
 
     if args.setup:
+        install_worfbench_eval_deps()
         return
 
     if not args.model:
@@ -96,7 +99,9 @@ def main() -> None:
 
     for finetuned, rag in scenarios:
         for task in tasks:
-            pred = prediction_path(cfg, args.model, finetuned=finetuned, rag=rag, task=task)
+            pred = latest_prediction_path(
+                cfg, args.model, finetuned=finetuned, rag=rag, task=task
+            )
             if not pred.exists():
                 print(f"[skip] sem predição: {pred}")
                 continue
@@ -109,7 +114,7 @@ def main() -> None:
                 eval_type=args.eval_type,
                 dry_run=args.dry_run,
             )
-            print(f"{'[dry-run] ' if args.dry_run else ''}{task} -> {out}")
+            print(f"{'[dry-run] ' if args.dry_run else ''}{task} ({pred.name}) -> {out}")
 
 
 if __name__ == "__main__":

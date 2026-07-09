@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from tcc.download.worfbench_data import list_test_tasks
 from tcc.paths import inference_run_meta_path, prediction_path, test_gold
-from tcc.rag.vector_store import retrieve
+from tcc.rag.vector_store import VectorRetriever
 from tcc.run_stamp import run_stamp, utc_now_iso
 
 
@@ -31,6 +31,7 @@ def build_prompt_messages(
     *,
     use_rag: bool,
     cfg: dict[str, Any],
+    retriever: VectorRetriever | None = None,
 ) -> list[dict[str, str]]:
     """I0/SFT: system+user. RAG/SFT+RAG: system enriquecido com 2 exemplos recuperados."""
     conv = gold_item.get("conversations") or gold_item.get("messages") or []
@@ -38,7 +39,9 @@ def build_prompt_messages(
     user = _final_user_message(conv)
 
     if use_rag:
-        retrieved = retrieve(cfg, user)
+        if retriever is None:
+            raise ValueError("use_rag=True exige retriever (carregue VectorRetriever.from_config uma vez)")
+        retrieved = retriever.retrieve(user)
         blocks = []
         for i, ex in enumerate(retrieved, 1):
             blocks.append(
@@ -74,6 +77,7 @@ def run_inference(
     stamp = run_stamp()
     started_at = utc_now_iso()
     outputs: dict[str, str] = {}
+    retriever = VectorRetriever.from_config(cfg) if use_rag else None
 
     for task in task_list:
         gold_path = test_gold(cfg, task)
@@ -84,7 +88,9 @@ def run_inference(
         subset = gold_data[:limit] if limit else gold_data
         desc = f"{task} ({model_id})"
         for item in tqdm(subset, desc=desc, unit="ex"):
-            messages = build_prompt_messages(item, use_rag=use_rag, cfg=cfg)
+            messages = build_prompt_messages(
+                item, use_rag=use_rag, cfg=cfg, retriever=retriever
+            )
             workflow = generate_fn(messages, model_id, finetuned)
             preds.append({"query": item, "workflow": workflow})
 

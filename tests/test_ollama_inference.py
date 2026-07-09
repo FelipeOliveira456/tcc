@@ -56,6 +56,9 @@ class OllamaInferenceTests(unittest.TestCase):
         body = json.loads(call[0][0].data.decode())
         self.assertEqual(body["model"], "qwen35-4b")
         self.assertFalse(body["stream"])
+        self.assertFalse(body["think"])
+        self.assertEqual(body["options"]["temperature"], 0.0)
+        self.assertEqual(body["options"]["num_predict"], 4096)
 
 
 if __name__ == "__main__":

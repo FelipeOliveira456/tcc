@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
+
+# WorFEval (eval_workflow) usa sentence-transformers + networkx.
+# O requirements.txt upstream lista módulos stdlib (collections, re…) — não instalar via pip.
+WORFBENCH_EVAL_DEPS = ("networkx",)
+
+
+def install_worfbench_eval_deps() -> None:
+    """Deps pip para node_eval --task eval_workflow (não usa o requirements.txt do upstream)."""
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", *WORFBENCH_EVAL_DEPS],
+        check=True,
+    )
 
 
 def clone_worfbench(cfg: dict[str, Any], *, force: bool = False) -> Path:
@@ -30,13 +43,6 @@ def clone_worfbench(cfg: dict[str, Any], *, force: bool = False) -> Path:
         ["git", "clone", "--branch", ref, "--depth", "1", url, str(dest)],
         check=True,
     )
-    req = dest / "requirements.txt"
-    if req.exists():
-        subprocess.run(
-            ["pip", "install", "-r", str(req)],
-            check=True,
-            cwd=str(dest),
-        )
     return dest
 
 

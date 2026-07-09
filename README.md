@@ -6,6 +6,8 @@ Pipeline enxuto. Parâmetro **`--model`** em tudo que envolve SLM (baixa um mode
 
 | Script | O que faz |
 |--------|-----------|
+| `setup_project.py` | **Setup único**: dados HF + índice RAG + WorFBench |
+| `run_model.py --model ID` | **Pipeline do modelo**: download → Ollama → I0/RAG/SFT/SFT+RAG (infer + eval) |
 | `download_data.py` | Treino + teste (`data/test/<task>/`, **sem** `gold_traj/` aninhado) |
 | `download_model.py --model ID` | Um modelo HF (`models/<id>/`) |
 | `ollama_import.py --model ID` | Gera Modelfile + comando `ollama create` |
@@ -17,6 +19,16 @@ Pipeline enxuto. Parâmetro **`--model`** em tudo que envolve SLM (baixa um mode
 Rodar o script **já executa** a ação. Use `--dry-run` só para inspecionar caminhos/comandos sem fazer nada.
 
 ## Fluxo do experimento
+
+**Atalho (recomendado):**
+
+```bash
+python scripts/setup_project.py
+python scripts/run_model.py --model qwen35-0.8b --limit 5   # piloto
+python scripts/run_model.py --model qwen35-4b              # completo
+```
+
+**Passo a passo manual:**
 
 ```text
 1. download_data.py
@@ -55,7 +67,7 @@ python scripts/infer.py --model qwen35-0.8b --limit 2   # piloto
 python scripts/infer.py --model qwen35-0.8b --dry-run  # só caminhos
 ```
 
-Config: `inference.ollama.base_url`, `timeout_s`, `temperature`.
+Config: `inference.ollama.base_url`, `timeout_s`, `temperature`, `think` (padrão `false` para todos os modelos), `num_predict`.
 
 ## HF → Ollama (importar modelos)
 
@@ -244,6 +256,10 @@ python3.12 -m venv .venv && source .venv/bin/activate
 python --version   # deve ser 3.11.x ou 3.12.x
 
 pip install -r requirements.txt
+# testes (opcional; pytest para test_qlora, unittest cobre o resto)
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -p 'test_*.py' -q
+# ou: python -m pytest tests/ -q
 # fine-tune (GPU): em um segundo passo, para o resolver não explodir
 pip install -r requirements-sft.txt
 # Ollama: instale separadamente em https://ollama.com

@@ -132,18 +132,47 @@ def load_vector_store(cfg: dict[str, Any]) -> tuple[list[dict], np.ndarray, Vect
     return payload["records"], payload["embeddings"], meta
 
 
+class VectorRetriever:
+    """Índice RAG em memória — carregar uma vez por run de inferência."""
+
+    def __init__(
+        self,
+        records: list[dict],
+        matrix: np.ndarray,
+        meta: VectorStoreMeta,
+        model: Any,
+    ) -> None:
+        self._records = records
+        self._matrix = matrix
+        self._meta = meta
+        self._model = model
+
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any]) -> VectorRetriever:
+        from sentence_transformers import SentenceTransformer
+
+        records, matrix, meta = load_vector_store(cfg)
+        model = SentenceTransformer(meta.embedding_model)
+        return cls(records, matrix, meta, model)
+
+    def retrieve(self, query: str, *, top_k: int | None = None) -> list[dict]:
+        k = top_k or self._meta.top_k
+        q = self._model.encode([query], convert_to_numpy=True)[0]
+        scores = self._matrix @ q / (
+            np.linalg.norm(self._matrix, axis=1) * np.linalg.norm(q) + 1e-9
+        )
+        order = np.argsort(-scores)
+        return [self._records[int(i)] for i in order[:k]]
+
+
 def retrieve(
     cfg: dict[str, Any],
     query: str,
     *,
     top_k: int | None = None,
+    retriever: VectorRetriever | None = None,
 ) -> list[dict]:
-    from sentence_transformers import SentenceTransformer
-
-    records, matrix, meta = load_vector_store(cfg)
-    k = top_k or meta.top_k
-    model = SentenceTransformer(meta.embedding_model)
-    q = model.encode([query], convert_to_numpy=True)[0]
-    scores = matrix @ q / (np.linalg.norm(matrix, axis=1) * np.linalg.norm(q) + 1e-9)
-    order = np.argsort(-scores)
-    return [records[int(i)] for i in order[:k]]
+    """Recupera top-k do treino. Passe `retriever` para evitar recarregar o modelo."""
+    if retriever is not None:
+        return retriever.retrieve(query, top_k=top_k)
+    return VectorRetriever.from_config(cfg).retrieve(query, top_k=top_k)
