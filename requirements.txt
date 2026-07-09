@@ -2,6 +2,7 @@
 # Base pinada do .venv atual + deps do pipeline (RAG / HF).
 PyYAML==6.0.3
 huggingface-hub==1.17.0
+tokenizers>=0.20
 tqdm==4.67.3
 numpy>=1.26
 datasets>=2.20,<4.1

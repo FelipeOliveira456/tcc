@@ -198,10 +198,17 @@ python scripts/finetune.py --model qwen35-0.8b --export-merged   # merge para Ol
 
 O pipeline gera:
 
-- `data/sft/worfbench_sharegpt.json` — 7 turnos (LLaMA-Factory + `mask_history: true`)
-- `data/sft/dataset_info.json` — registro exigido pelo LLaMA-Factory
+- `data/sft/worfbench_sharegpt.json` — 7 turnos (LLaMA-Factory + `mask_history: true`);
+  se passar de `sft.max_example_tokens` (default **2048**), remove rodadas few-shot
+  antigas (user+assistant) até caber; se ainda passar só com system+tarefa final,
+  o exemplo é descartado. Gold em `data/train/` e o índice RAG **não** mudam.
+- `data/sft/worfbench_sharegpt.filter.json` — contagem full/truncated/dropped
+- `data/sft/dataset_info.json` — registro exigido pelo LLaMA-Factory (tags OpenAI)
 - `outputs/manifests/finetune_<model>_<stamp>.yaml` — config completa (`stage`, `lora_target`, `cutoff_len`, etc.)
 - `checkpoints/<model>/` — adapters; `merged/` após `--export-merged`
+
+Defaults de memória (24 GB): `cutoff_len: 2048`, `per_device_train_batch_size: 1`,
+`gradient_accumulation_steps: 8` (batch efetivo = 8).
 
 Loss só na **7ª mensagem** (workflow ouro); as 6 primeiras são contexto — alinhado ao WorFBench.
 

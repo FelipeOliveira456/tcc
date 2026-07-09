@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
-from tcc.finetune.dataset import SHAREGPT_DATASET_NAME, prepare_sharegpt_dataset, write_dataset_info
+from tcc.finetune.dataset import (
+    SHAREGPT_DATASET_NAME,
+    prepare_sharegpt_dataset,
+    write_dataset_info,
+)
 from tcc.models_registry import get_model_spec, get_sft_template, get_trust_remote_code
 from tcc.paths import checkpoint_dir, finetune_manifest_paths, model_dir
 from tcc.run_stamp import run_stamp, utc_now_iso
@@ -27,8 +31,8 @@ def build_llamafactory_yaml(cfg: dict[str, Any], model_id: str, stamp: str) -> P
     trust = get_trust_remote_code(cfg, model_id)
     dataset_dir = sft_dataset_dir(cfg)
     ckpt = checkpoint_dir(cfg, model_id)
-    grad_accum = int(sft.get("gradient_accumulation_steps", 4))
-    cutoff = int(sft.get("cutoff_len", 8192))
+    grad_accum = int(sft.get("gradient_accumulation_steps", 8))
+    cutoff = int(sft.get("cutoff_len", 2048))
     yaml_text = f"""# Gerado pelo TCC — {stamp}
 ### model
 model_name_or_path: {model_dir(cfg, model_id)}
@@ -39,9 +43,9 @@ stage: sft
 do_train: true
 finetuning_type: lora
 lora_target: all
-lora_rank: {int(sft.get('lora_rank', 16))}
-lora_alpha: {int(sft.get('lora_alpha', 32))}
-quantization_bit: {int(sft.get('quantization_bit', 4))}
+lora_rank: {int(sft.get("lora_rank", 16))}
+lora_alpha: {int(sft.get("lora_alpha", 32))}
+quantization_bit: {int(sft.get("quantization_bit", 4))}
 quantization_method: bnb
 
 ### dataset
@@ -51,25 +55,25 @@ template: {template}
 cutoff_len: {cutoff}
 mask_history: true
 overwrite_cache: true
-preprocessing_num_workers: {int(sft.get('preprocessing_num_workers', 4))}
+preprocessing_num_workers: {int(sft.get("preprocessing_num_workers", 4))}
 
 ### output
 output_dir: {ckpt}
-logging_steps: {int(sft.get('logging_steps', 10))}
-save_steps: {int(sft.get('save_steps', 500))}
+logging_steps: {int(sft.get("logging_steps", 10))}
+save_steps: {int(sft.get("save_steps", 500))}
 plot_loss: true
 overwrite_output_dir: true
 
 ### train
-per_device_train_batch_size: {int(sft.get('per_device_train_batch_size', 2))}
+per_device_train_batch_size: {int(sft.get("per_device_train_batch_size", 1))}
 gradient_accumulation_steps: {grad_accum}
-learning_rate: {sft.get('learning_rate', 2e-5)}
-num_train_epochs: {int(sft.get('num_train_epochs', 3))}
+learning_rate: {sft.get("learning_rate", 2e-5)}
+num_train_epochs: {int(sft.get("num_train_epochs", 3))}
 lr_scheduler_type: cosine
-warmup_ratio: {sft.get('warmup_ratio', 0.1)}
+warmup_ratio: {sft.get("warmup_ratio", 0.1)}
 bf16: true
 ddp_timeout: 180000000
-seed: {int(sft.get('seed', 42))}
+seed: {int(sft.get("seed", 42))}
 """
     yaml_path.write_text(yaml_text, encoding="utf-8")
     return yaml_path
@@ -114,7 +118,7 @@ def run_finetune(
     stamp = run_stamp()
     started_at = utc_now_iso()
 
-    sharegpt = prepare_sharegpt_dataset(cfg)
+    sharegpt = prepare_sharegpt_dataset(cfg, model_id=model_id)
     write_dataset_info(cfg)
     yaml_path = build_llamafactory_yaml(cfg, model_id, stamp)
     _, manifest_path = finetune_manifest_paths(cfg, model_id, stamp)

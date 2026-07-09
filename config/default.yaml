@@ -92,9 +92,12 @@ sft:
   output_dir: checkpoints/sft
   num_train_epochs: 3
   learning_rate: 2.0e-5
-  per_device_train_batch_size: 2
-  gradient_accumulation_steps: 4
-  cutoff_len: 8192
+  # batch 1 + accum 8 = batch efetivo 8 (menos VRAM no pico)
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  cutoff_len: 2048
+  # remove exemplos > max_example_tokens do JSON SFT (não altera gold/RAG)
+  max_example_tokens: 2048
   quantization_bit: 4
   lora_rank: 16
   lora_alpha: 32
