@@ -78,10 +78,22 @@ def test_sharegpt_dataset_and_info(cfg):
     assert path.name == f"{SHAREGPT_DATASET_NAME}.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert len(data[0]["messages"]) == 7
+    assert data[0]["messages"][0] == {"role": "system", "content": "sys"}
+    assert "from" not in data[0]["messages"][0]
     info_path = write_dataset_info(cfg)
     info = json.loads(info_path.read_text(encoding="utf-8"))
     assert SHAREGPT_DATASET_NAME in info
-    assert info[SHAREGPT_DATASET_NAME]["formatting"] == "sharegpt"
+    block = info[SHAREGPT_DATASET_NAME]
+    assert block["formatting"] == "sharegpt"
+    assert block["columns"] == {"messages": "messages"}
+    # OpenAI-style messages require explicit tags (default sharegpt expects from/value)
+    assert block["tags"] == {
+        "role_tag": "role",
+        "content_tag": "content",
+        "user_tag": "user",
+        "assistant_tag": "assistant",
+        "system_tag": "system",
+    }
 
 
 def test_llamafactory_yaml_has_required_fields(cfg):
@@ -102,6 +114,10 @@ def test_dry_run_finetune(cfg):
     assert manifests
     manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
     assert manifest["sft_backend"] == "llamafactory"
+    info = json.loads(
+        (cfg["_project_root"] / "data" / "sft" / "dataset_info.json").read_text(encoding="utf-8")
+    )
+    assert info[SHAREGPT_DATASET_NAME]["tags"]["role_tag"] == "role"
 
 
 def test_modelfile_generation(cfg):

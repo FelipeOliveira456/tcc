@@ -42,7 +42,11 @@ def prepare_sharegpt_dataset(cfg: dict[str, Any]) -> Path:
 
 
 def write_dataset_info(cfg: dict[str, Any]) -> Path:
-    """Registra dataset em dataset_info.json (exigido pelo LLaMA-Factory)."""
+    """Registra dataset em dataset_info.json (exigido pelo LLaMA-Factory).
+
+    O JSON usa formato OpenAI (role/content). Sem ``tags``, o LLaMA-Factory
+    assume ShareGPT clássico (from/value) e falha com KeyError: 'from'.
+    """
     sft_dir = resolve_path(cfg, "data_dir") / "sft"
     sft_dir.mkdir(parents=True, exist_ok=True)
     info: dict[str, Any] = {
@@ -50,6 +54,13 @@ def write_dataset_info(cfg: dict[str, Any]) -> Path:
             "file_name": f"{SHAREGPT_DATASET_NAME}.json",
             "formatting": "sharegpt",
             "columns": {"messages": "messages"},
+            "tags": {
+                "role_tag": "role",
+                "content_tag": "content",
+                "user_tag": "user",
+                "assistant_tag": "assistant",
+                "system_tag": "system",
+            },
         }
     }
     path = sft_dir / "dataset_info.json"
