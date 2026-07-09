@@ -11,6 +11,7 @@ from tcc.backends.ollama_inference import (
     resolve_ollama_model_name,
 )
 from tcc.config import load_config
+from tcc.inference.runner import build_prompt_messages
 from tcc.paths import prediction_path
 from tcc.run_stamp import run_stamp
 
@@ -59,6 +60,26 @@ class OllamaInferenceTests(unittest.TestCase):
         self.assertFalse(body["think"])
         self.assertEqual(body["options"]["temperature"], 0.0)
         self.assertEqual(body["options"]["num_predict"], 4096)
+
+    def test_rag_prompt_headers_english(self) -> None:
+        gold = {
+            "conversations": [
+                {"role": "system", "content": "You are a planner."},
+                {"role": "user", "content": "Do the task"},
+                {"role": "assistant", "content": "Node:\n1: x"},
+            ]
+        }
+        retriever = MagicMock()
+        retriever.retrieve.return_value = [
+            {"user": "train q", "workflow": "Node:\n1: a"},
+        ]
+        msgs = build_prompt_messages(gold, use_rag=True, cfg={}, retriever=retriever)
+        system = msgs[0]["content"]
+        self.assertIn("Retrieved training examples", system)
+        self.assertIn("### Example 1", system)
+        self.assertIn("Question:", system)
+        self.assertNotIn("Exemplos recuperados", system)
+        self.assertNotIn("Pergunta:", system)
 
 
 if __name__ == "__main__":

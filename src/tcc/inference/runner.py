@@ -45,11 +45,11 @@ def build_prompt_messages(
         blocks = []
         for i, ex in enumerate(retrieved, 1):
             blocks.append(
-                f"### Exemplo {i}\nPergunta:\n{ex['user']}\n\nWorkflow:\n{ex['workflow']}\n"
+                f"### Example {i}\nQuestion:\n{ex['user']}\n\nWorkflow:\n{ex['workflow']}\n"
             )
         system = (
             f"{system}\n\n"
-            "Exemplos recuperados do treino (use como referência estrutural):\n\n"
+            "Retrieved training examples (use as structural reference):\n\n"
             + "\n".join(blocks)
         )
 

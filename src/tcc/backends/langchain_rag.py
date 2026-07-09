@@ -39,6 +39,6 @@ def format_prompt_with_rag(
     """Monta messages para Ollama — 2 shots dinâmicos + pergunta."""
     rag_text = "\n\n".join(retrieved_blocks)
     return [
-        {"role": "system", "content": f"{system}\n\nExemplos recuperados:\n{rag_text}"},
+        {"role": "system", "content": f"{system}\n\nRetrieved examples:\n{rag_text}"},
         {"role": "user", "content": user},
     ]

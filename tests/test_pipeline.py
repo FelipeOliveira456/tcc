@@ -14,6 +14,9 @@ from tcc.pipeline.model_pipeline import (
     build_infer_args,
     build_ollama_import_args,
     build_worfeval_args,
+    run_all_evals,
+    run_infer_track,
+    run_parallel_infer_tracks,
 )
 from tcc.pipeline.setup_pipeline import setup_steps
 from tcc.pipeline.steps import PROJECT_ROOT, SCRIPTS_DIR, run_script
@@ -160,14 +163,110 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn("finetune.py", proc.stdout)
         self.assertIn("infer.py", proc.stdout)
         self.assertIn("worfeval.py", proc.stdout)
+        self.assertNotIn("--finetuned", proc.stdout)
 
+    def test_run_model_full_dry_run_order(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "run_model.py"),
+                "--model",
+                "qwen35-0.8b",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=str(ROOT),
+        )
+        out = proc.stdout
+        self.assertIn("finetune.py", out)
+        self.assertIn("Inferência paralela", out)
+        self.assertIn("WorFEval — todos os cenários", out)
+        self.assertLess(out.index("finetune.py"), out.index("ollama_import.py"))
+        self.assertLess(out.index("finetune.py"), out.index("Inferência paralela"))
+        self.assertLess(out.index("Inferência paralela"), out.index("WorFEval — todos os cenários"))
+
+    @patch("tcc.pipeline.model_pipeline.run_infer")
+    def test_run_infer_track_order(self, mock_infer: MagicMock) -> None:
+        run_infer_track(
+            track_label="base",
+            model="m",
+            finetuned=False,
+            config=None,
+            limit=None,
+            task=None,
+            dry_run=True,
+        )
+        self.assertEqual(mock_infer.call_count, 2)
+        first, second = mock_infer.call_args_list
+        self.assertFalse(first.kwargs["rag"])
+        self.assertFalse(first.kwargs["finetuned"])
+        self.assertTrue(second.kwargs["rag"])
+        self.assertFalse(second.kwargs["finetuned"])
+
+    @patch("tcc.pipeline.model_pipeline.run_infer_track")
+    def test_run_parallel_infer_tracks_both(self, mock_track: MagicMock) -> None:
+        run_parallel_infer_tracks(
+            model="m",
+            config=None,
+            limit=5,
+            task="wikihow",
+            dry_run=True,
+        )
+        self.assertEqual(mock_track.call_count, 2)
+        finetuned_flags = sorted(c.kwargs["finetuned"] for c in mock_track.call_args_list)
+        self.assertEqual(finetuned_flags, [False, True])
+
+    @patch("tcc.pipeline.model_pipeline.run_infer_track")
+    def test_run_parallel_infer_propagates_error(self, mock_track: MagicMock) -> None:
+        def boom(**kwargs):
+            if kwargs.get("finetuned"):
+                raise RuntimeError("sft failed")
+
+        mock_track.side_effect = boom
+        with self.assertRaises(RuntimeError) as ctx:
+            run_parallel_infer_tracks(
+                model="m",
+                config=None,
+                limit=None,
+                task=None,
+                dry_run=True,
+            )
+        self.assertIn("sft", str(ctx.exception).lower())
+
+    @patch("tcc.pipeline.model_pipeline.run_eval")
+    def test_run_all_evals_scenarios(self, mock_eval: MagicMock) -> None:
+        run_all_evals(
+            model="m",
+            config=None,
+            task=None,
+            eval_types=["node"],
+            dry_run=True,
+            include_sft=True,
+        )
+        self.assertEqual(mock_eval.call_count, 4)
+        pairs = {(c.kwargs["rag"], c.kwargs["finetuned"]) for c in mock_eval.call_args_list}
+        self.assertEqual(pairs, {(False, False), (True, False), (False, True), (True, True)})
+
+    @patch("tcc.pipeline.model_pipeline.run_eval")
+    def test_run_all_evals_skip_sft(self, mock_eval: MagicMock) -> None:
+        run_all_evals(
+            model="m",
+            config=None,
+            task=None,
+            eval_types=["node"],
+            dry_run=True,
+            include_sft=False,
+        )
+        self.assertEqual(mock_eval.call_count, 2)
+        pairs = {(c.kwargs["rag"], c.kwargs["finetuned"]) for c in mock_eval.call_args_list}
+        self.assertEqual(pairs, {(False, False), (True, False)})
 
     @patch("subprocess.run")
     def test_run_eval_uses_sys_executable(self, mock_run: MagicMock) -> None:
-        import sys
         import tempfile
 
-        from tcc.config import load_config
         from tcc.worfeval.runner import run_eval_task
 
         cfg = load_config()

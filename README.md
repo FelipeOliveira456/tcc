@@ -28,20 +28,26 @@ python scripts/run_model.py --model qwen35-0.8b --limit 5   # piloto
 python scripts/run_model.py --model qwen35-4b              # completo
 ```
 
+`run_model.py` faz: download → **SFT** → Ollama (base + SFT) → **infer paralelo** (base: I0→RAG ‖ SFT: SFT→SFT+RAG) → WorFEval de todos os cenários.
+
 **Passo a passo manual:**
 
 ```text
 1. download_data.py
 2. download_model.py --model qwen35-4b
 3. build_vector_db.py
-4. infer.py --model qwen35-4b                       # I0
-5. infer.py --model qwen35-4b --rag                 # RAG
-6. finetune.py --model qwen35-4b
-7. infer.py --model qwen35-4b --finetuned           # SFT
-8. infer.py --model qwen35-4b --finetuned --rag
-9. worfeval.py --setup
-10. worfeval.py --model qwen35-4b --all-scenarios
+4. finetune.py --model qwen35-4b --export-merged
+5. ollama_import.py --model qwen35-4b --run
+6. ollama_import.py --model qwen35-4b --finetuned --run
+7. infer.py --model qwen35-4b                       # I0
+8. infer.py --model qwen35-4b --rag                 # RAG
+9. infer.py --model qwen35-4b --finetuned           # SFT
+10. infer.py --model qwen35-4b --finetuned --rag
+11. worfeval.py --setup
+12. worfeval.py --model qwen35-4b --all-scenarios
 ```
+
+(No atalho, os passos 7–10 rodam em paralelo: track base ‖ track SFT.)
 
 ## Cenários (`infer.py`)
 

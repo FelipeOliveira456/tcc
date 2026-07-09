@@ -40,8 +40,8 @@ class TrainRagRetriever:
         blocks: list[str] = []
         for i, ex in enumerate(examples, 1):
             blocks.append(
-                f"### Exemplo recuperado {i}\n"
-                f"Pergunta:\n{ex.query_text}\n\n"
+                f"### Example {i}\n"
+                f"Question:\n{ex.query_text}\n\n"
                 f"Workflow:\n{ex.workflow_text}\n"
             )
         return "\n".join(blocks)
