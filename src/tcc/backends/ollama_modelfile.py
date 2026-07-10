@@ -24,7 +24,7 @@ def resolve_weights_dir(
             return ckpt
         raise FileNotFoundError(
             f"Checkpoint SFT não encontrado em {ckpt}. "
-            "Rode finetune.py e, para LLaMA-Factory, exporte com --export-merged."
+            "Rode finetune.py --export-merged e depois ollama_import.py --finetuned."
         )
     weights = model_dir(cfg, model_id)
     if not weights.is_dir() or not any(weights.iterdir()):

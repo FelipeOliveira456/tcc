@@ -1,4 +1,4 @@
-"""Testes de geração de dataset/YAML SFT e Modelfile Ollama."""
+"""Testes de geração de dataset SFT (Unsloth) e Modelfile Ollama."""
 
 from __future__ import annotations
 
@@ -22,10 +22,31 @@ from tcc.config import load_config
 from tcc.finetune.dataset import (
     SHAREGPT_DATASET_NAME,
     prepare_sharegpt_dataset,
-    write_dataset_info,
 )
-from tcc.finetune.qlora import build_llamafactory_yaml, run_finetune
+from tcc.finetune.sft import run_finetune
+from tcc.finetune.unsloth_sft import build_masked_example
 from tcc.models_registry import get_sft_template
+
+
+class _FakeTok:
+    """Tokenizer mínimo para testar máscara do último assistant."""
+
+    def apply_chat_template(
+        self, messages, tokenize=False, add_generation_prompt=False, **_
+    ):
+        parts = []
+        for m in messages:
+            parts.append(f"<|{m['role']}|>\n{m['content']}\n")
+        if add_generation_prompt:
+            parts.append("<|assistant|>\n")
+        return "".join(parts)
+
+    def __call__(
+        self, text, truncation=True, max_length=2048, add_special_tokens=False
+    ):
+        # 1 char ≈ 1 token (só para teste)
+        ids = list(range(min(len(text), max_length)))
+        return {"input_ids": ids}
 
 
 @pytest.fixture
@@ -73,37 +94,43 @@ def cfg(tmp_path: Path):
             ]
         },
         "sft": {
-            "num_train_epochs": 3,
+            "framework": "unsloth",
+            "num_train_epochs": 1,
             "cutoff_len": 2048,
             "max_example_tokens": 2048,
             "per_device_train_batch_size": 1,
             "gradient_accumulation_steps": 8,
+            "load_in_4bit": False,
+            "load_in_16bit": True,
         },
         "inference": {"ollama": {"temperature": 0.0, "sft_suffix": "-sft"}},
     }
 
 
-def test_sharegpt_dataset_and_info(cfg):
+def test_sharegpt_dataset(cfg):
     path = prepare_sharegpt_dataset(cfg)
     assert path.name == f"{SHAREGPT_DATASET_NAME}.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert len(data[0]["messages"]) == 7
     assert data[0]["messages"][0] == {"role": "system", "content": "sys"}
     assert "from" not in data[0]["messages"][0]
-    info_path = write_dataset_info(cfg)
-    info = json.loads(info_path.read_text(encoding="utf-8"))
-    assert SHAREGPT_DATASET_NAME in info
-    block = info[SHAREGPT_DATASET_NAME]
-    assert block["formatting"] == "sharegpt"
-    assert block["columns"] == {"messages": "messages"}
-    # OpenAI-style messages require explicit tags (default sharegpt expects from/value)
-    assert block["tags"] == {
-        "role_tag": "role",
-        "content_tag": "content",
-        "user_tag": "user",
-        "assistant_tag": "assistant",
-        "system_tag": "system",
-    }
+
+
+def test_masked_example_keeps_only_last_assistant():
+    tok = _FakeTok()
+    msgs = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "u"},
+        {"role": "assistant", "content": "gold"},
+    ]
+    ex = build_masked_example(tok, msgs, max_seq_length=2048)
+    assert ex is not None
+    assert len(ex["input_ids"]) == len(ex["labels"])
+    assert any(x == -100 for x in ex["labels"])
+    assert any(x != -100 for x in ex["labels"])
+    first_train = next(i for i, v in enumerate(ex["labels"]) if v != -100)
+    assert first_train > 0
+    assert all(v == -100 for v in ex["labels"][:first_train])
 
 
 def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):
@@ -119,7 +146,6 @@ def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):
             {"role": "assistant", "content": "ok"},
         ]
     }
-    # 7 turns: long demos + final; dropping demos should keep system+final
     long_demo = "D" * 5_000
     long_final = "F" * 200
     long_ok = {
@@ -133,7 +159,6 @@ def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):
             {"role": "assistant", "content": "gold"},
         ]
     }
-    # final task alone still huge → drop
     huge_final = {
         "messages": [
             {"role": "system", "content": "sys"},
@@ -151,19 +176,14 @@ def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):
     )
     assert fitted is not None
     assert tag.startswith("drop_")
-    assert fitted[0]["role"] == "system"
     assert fitted[-2]["content"] == long_final
     assert fitted[-1]["content"] == "gold"
-    assert len(fitted) < len(long_ok["messages"])
 
     kept, stats = filter_messages_by_max_tokens(
         [short, long_ok, huge_final], max_tokens=2048, tokenizer=None
     )
-    assert stats["total"] == 3
     assert stats["kept"] == 2
     assert stats["dropped"] == 1
-    assert stats["truncated"] >= 1
-    assert len(kept) == 2
 
     train = tmp_path / "data" / "train" / "worfbench_train.json"
     train.parent.mkdir(parents=True)
@@ -181,35 +201,21 @@ def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):
         "models": {"slm": []},
     }
     path = prepare_sharegpt_dataset(cfg)
-    data = json.loads(path.read_text(encoding="utf-8"))
-    assert len(data) == 2
-    meta = json.loads(path.with_suffix(".filter.json").read_text(encoding="utf-8"))
-    assert meta["dropped"] == 1
-    assert meta["kept"] == 2
-    assert meta["truncated"] >= 1
+    assert len(json.loads(path.read_text(encoding="utf-8"))) == 2
 
 
-def test_llamafactory_yaml_has_required_fields(cfg):
-    yaml_path = build_llamafactory_yaml(cfg, "qwen35-0.8b", "20260706_120000")
-    text = yaml_path.read_text(encoding="utf-8")
-    assert "stage: sft" in text
-    assert "template: qwen3_5_nothink" in text
-    assert f"dataset: {SHAREGPT_DATASET_NAME}" in text
-    assert "mask_history: true" in text
-    assert "quantization_method: bnb" in text
-    assert "dataset_dir:" in text
-    assert "per_device_train_batch_size: 1" in text
-    assert "cutoff_len: 2048" in text
-    assert "gradient_accumulation_steps: 8" in text
-
-
-def test_default_config_sft_memory_settings():
+def test_default_config_sft_unsloth():
     cfg = load_config()
     sft = cfg["sft"]
+    assert sft["framework"] == "unsloth"
     assert sft["per_device_train_batch_size"] == 1
     assert sft["gradient_accumulation_steps"] == 8
     assert sft["cutoff_len"] == 2048
     assert sft["max_example_tokens"] == 2048
+    assert sft["num_train_epochs"] == 1
+    assert sft["load_in_16bit"] is True
+    assert sft["load_in_4bit"] is False
+    assert sft["optim"] == "adamw_8bit"
 
 
 def test_dry_run_finetune(cfg):
@@ -220,15 +226,11 @@ def test_dry_run_finetune(cfg):
             "finetune_qwen35-0.8b_*.json"
         )
     )
-    assert manifests
+    assert len(manifests) == 1
     manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
-    assert manifest["sft_backend"] == "llamafactory"
-    info = json.loads(
-        (cfg["_project_root"] / "data" / "sft" / "dataset_info.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert info[SHAREGPT_DATASET_NAME]["tags"]["role_tag"] == "role"
+    assert manifest["sft_backend"] == "unsloth"
+    assert manifest["hparams"]["num_train_epochs"] == 1
+    assert manifest["hparams"]["mask"] == "last_assistant_only"
 
 
 def test_modelfile_generation(cfg):

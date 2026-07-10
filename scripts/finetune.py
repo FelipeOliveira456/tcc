@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fine-tuning QLoRA de UM modelo (--model)."""
+"""Fine-tuning SFT (Unsloth bf16 LoRA) de UM modelo (--model)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from tcc.config import load_config
-from tcc.finetune.qlora import run_finetune
+from tcc.finetune.sft import run_finetune
 from tcc.models_registry import get_model_spec
 
 
@@ -22,12 +22,12 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Só gera dataset + YAML em outputs/manifests/, sem treinar",
+        help="Só gera dataset + manifest em outputs/manifests/, sem treinar",
     )
     parser.add_argument(
         "--export-merged",
         action="store_true",
-        help="Após treino LLaMA-Factory, merge LoRA em checkpoints/<model>/merged/",
+        help="Após treino, merge LoRA em checkpoints/<model>/merged/ (Unsloth 16-bit)",
     )
     args = parser.parse_args()
     cfg = load_config(args.config)
@@ -40,7 +40,7 @@ def main() -> None:
         export_merged=args.export_merged,
     )
     if args.dry_run:
-        print(f"[dry-run] manifest/YAML com stamp em outputs/manifests/finetune_{args.model}_*")
+        print(f"[dry-run] manifest em outputs/manifests/finetune_{args.model}_*.json")
         print(f"checkpoint previsto: {out}")
     else:
         print(f"checkpoint: {out}")

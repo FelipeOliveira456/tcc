@@ -1,11 +1,13 @@
-# Fine-tune (QLoRA / LLaMA-Factory) — instale DEPOIS de requirements.txt:
+# Fine-tune — Unsloth (bf16 LoRA).
+#
 #   pip install -r requirements.txt
 #   pip install -r requirements-sft.txt
 #
-# Requer Python 3.11 ou 3.12 (não use 3.13/3.14 — torch/llamafactory quebram o resolver).
-# GPU NVIDIA: se torch sem CUDA, reinstale de https://pytorch.org antes do finetune.
+# Requer Python 3.11 ou 3.12 e GPU NVIDIA (torch CUDA).
+# Unsloth puxa transformers v5+, trl, peft, etc.
 #
-# llamafactory puxa torch, transformers, peft, accelerate, trl, datasets etc.
-# Não liste esses pacotes aqui com >= solto — pip entra em resolution-too-deep.
-llamafactory==0.9.5
+# Qwen3.5: use bf16 LoRA (load_in_16bit); QLoRA 4-bit não é recomendado pela Unsloth.
+unsloth
+unsloth_zoo
 bitsandbytes>=0.45.0
+datasets>=2.20

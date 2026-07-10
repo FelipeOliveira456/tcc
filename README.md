@@ -127,7 +127,7 @@ ollama run qwen35-0.8b "Olá"
 
 ### 3. Modelo SFT no Ollama (após `finetune.py`)
 
-O treino QLoRA roda fora do Ollama (LLaMA-Factory). Para inferir com `--finetuned`, exporte pesos e crie `{model}-sft`.
+O treino SFT roda fora do Ollama (Unsloth, bf16 LoRA). Para inferir com `--finetuned`, exporte pesos e crie `{model}-sft`.
 
 ```bash
 pip install -r requirements.txt -r requirements-sft.txt
@@ -151,12 +151,12 @@ Preferir **merge + create** para reprodutibilidade; adapter direto exige base id
 
 ### 4. Notas por família
 
-| Família | Import safetensors | Template SFT (LLaMA-Factory) |
+| Família | Import safetensors | Chat template (tokenizer HF) |
 |---------|-------------------|------------------------------|
-| Qwen3.5 | Ollama ≥0.17 com suporte qwen35; senão GGUF via llama.cpp | `qwen3_5_nothink` |
-| Granite 4.1 | safetensors ou quantize na create | `granite4` |
-| Gemma 3 | safetensors; licença Google no HF | `gemma3` |
-| Ministral 3 | safetensors (arquitetura Mistral) | `ministral3` |
+| Qwen3.5 | Ollama ≥0.17 com suporte qwen35; senão GGUF via llama.cpp | Qwen3.5 / `enable_thinking=False` |
+| Granite 4.1 | safetensors ou quantize na create | Granite |
+| Gemma 3 | safetensors; licença Google no HF | Gemma |
+| Ministral 3 | safetensors (arquitetura Mistral) | Ministral |
 
 Modelos grandes: se `ollama create` estourar memória, use `GOMAXPROCS=1 ollama create ...`.
 
@@ -173,7 +173,7 @@ inference:
         sft: meu-qwen-08-sft
 ```
 
-## Fine-tune (SFT / QLoRA)
+## Fine-tune (SFT / Unsloth)
 
 Dependências extras (dois passos, ver [Setup](#setup)):
 
@@ -182,35 +182,39 @@ pip install -r requirements.txt
 pip install -r requirements-sft.txt
 ```
 
-Inclui **LLaMA-Factory** 0.9.5 (puxa torch, transformers, peft, etc.) e **bitsandbytes** para QLoRA.
-
-Todos os SLMs do recorte usam **LLaMA-Factory** com template por modelo em `config/default.yaml`
-(`qwen3_5_nothink`, `granite4`, `gemma3`, `ministral3`).
+Backend: **Unsloth** (bf16 LoRA). No Qwen3.5 a Unsloth reporta ~**3 GB** VRAM no 0.8B
+(vs OOM no stack anterior sem kernels). Loss só no **último** assistant.
 
 ```bash
-# Inspecionar YAML + dataset (sem GPU)
+# Inspecionar dataset + manifest (sem GPU)
 python scripts/finetune.py --model qwen35-0.8b --dry-run
 
-# Treino real
+# Treino real (1 época)
 python scripts/finetune.py --model qwen35-0.8b
-python scripts/finetune.py --model qwen35-0.8b --export-merged   # merge para Ollama
+python scripts/finetune.py --model qwen35-0.8b --export-merged   # merge 16-bit → Ollama
 ```
 
 O pipeline gera:
 
-- `data/sft/worfbench_sharegpt.json` — 7 turnos (LLaMA-Factory + `mask_history: true`);
-  se passar de `sft.max_example_tokens` (default **2048**), remove rodadas few-shot
-  antigas (user+assistant) até caber; se ainda passar só com system+tarefa final,
-  o exemplo é descartado. Gold em `data/train/` e o índice RAG **não** mudam.
+- `data/sft/worfbench_sharegpt.json` — 7 turnos; se passar de `max_example_tokens` (2048),
+  remove demos few-shot antigas; gold/RAG **não** mudam
 - `data/sft/worfbench_sharegpt.filter.json` — contagem full/truncated/dropped
-- `data/sft/dataset_info.json` — registro exigido pelo LLaMA-Factory (tags OpenAI)
-- `outputs/manifests/finetune_<model>_<stamp>.yaml` — config completa (`stage`, `lora_target`, `cutoff_len`, etc.)
-- `checkpoints/<model>/` — adapters; `merged/` após `--export-merged`
+- `outputs/manifests/finetune_<model>_<stamp>.json`
+- `checkpoints/<model>/` — adapters LoRA; `merged/` após `--export-merged`
 
-Defaults de memória (24 GB): `cutoff_len: 2048`, `per_device_train_batch_size: 1`,
-`gradient_accumulation_steps: 8` (batch efetivo = 8).
+Defaults: `framework: unsloth`, `num_train_epochs: 1`, `cutoff_len: 2048`,
+`load_in_16bit: true`, `load_in_4bit: false`, batch 1 × accum 8.
 
-Loss só na **7ª mensagem** (workflow ouro); as 6 primeiras são contexto — alinhado ao WorFBench.
+**LabRI:**
+
+```bash
+pip uninstall -y causal-conv1d   # se instalou wheel incompatível
+pip install -r requirements-sft.txt
+git pull
+python scripts/finetune.py --model qwen35-0.8b --export-merged
+```
+
+Loss só na **última** mensagem assistant (workflow ouro); demos = contexto.
 
 ## Marcadores de tempo (inferência e fine-tune)
 
@@ -269,7 +273,7 @@ python3.12 -m venv .venv && source .venv/bin/activate
 python --version   # deve ser 3.11.x ou 3.12.x
 
 pip install -r requirements.txt
-# testes (opcional; pytest para test_qlora, unittest cobre o resto)
+# testes (opcional; pytest para test_sft, unittest cobre o resto)
 pip install -r requirements-dev.txt
 python -m unittest discover -s tests -p 'test_*.py' -q
 # ou: python -m pytest tests/ -q
@@ -278,10 +282,10 @@ pip install -r requirements-sft.txt
 # Ollama: instale separadamente em https://ollama.com
 ```
 
-Se o `pip install -r requirements-sft.txt` ainda falhar, instale só o LLaMA-Factory (ele puxa o resto):
+Se o `pip install -r requirements-sft.txt` falhar no LabRI, tente:
 
 ```bash
-pip install "llamafactory==0.9.5" "bitsandbytes>=0.45.0"
+pip install "unsloth" "unsloth_zoo" "bitsandbytes>=0.45.0"
 ```
 
-Mais detalhes (Ollama, LangChain, QLoRA): [`docs/stack.md`](docs/stack.md).
+Mais detalhes (Ollama, LangChain, SFT): [`docs/stack.md`](docs/stack.md).

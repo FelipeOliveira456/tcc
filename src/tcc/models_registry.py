@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Templates LLaMA-Factory (https://github.com/hiyouga/LLaMA-Factory)
+# Templates de chat (metadado; Unsloth usa apply_chat_template do tokenizer HF).
 _DEFAULT_SFT_TEMPLATE = "llama3"
 
 # Fallback quando o modelo não define sft_template no YAML.

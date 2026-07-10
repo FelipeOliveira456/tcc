@@ -9,7 +9,6 @@ paths:
   outputs_dir: outputs
   rag_index_dir: data/rag_index
   worfbench_repo: external/WorFBench
-  llama_factory_repo: external/LLaMA-Factory
 
 huggingface:
   train_repo: zjunlp/WorFBench_train
@@ -87,24 +86,26 @@ rag:
   seed: 42
 
 sft:
-  framework: llama-factory
-  # template por modelo em models.slm[].sft_template (não use llama3 global)
+  framework: unsloth
   output_dir: checkpoints/sft
-  num_train_epochs: 3
+  num_train_epochs: 1
   learning_rate: 2.0e-5
-  # batch 1 + accum 8 = batch efetivo 8 (menos VRAM no pico)
+  # batch 1 + accum 8 = batch efetivo 8
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 8
   cutoff_len: 2048
-  # remove exemplos > max_example_tokens do JSON SFT (não altera gold/RAG)
+  # remove demos few-shot longas no JSON SFT (não altera gold/RAG)
   max_example_tokens: 2048
-  quantization_bit: 4
+  # Qwen3.5: bf16 LoRA (não QLoRA 4-bit — instável no hybrid)
+  load_in_4bit: false
+  load_in_16bit: true
   lora_rank: 16
   lora_alpha: 32
+  lora_dropout: 0.0
+  optim: adamw_8bit
   logging_steps: 10
   save_steps: 500
   warmup_ratio: 0.1
-  preprocessing_num_workers: 4
   seed: 42
 
 scenarios:

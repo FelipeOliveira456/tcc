@@ -1,29 +1,27 @@
-# Copie para config/backends.yaml — escolha de runtime (discussão / implementação futura).
+# Copie para config/backends.yaml — escolha de runtime.
 # Avaliação (teste) permanece WorFEval; não configurável aqui.
 
 train:
-  # unsloth | llamafactory | trl
   engine: unsloth
-  method: qlora
-  quantization_bit: 4
+  method: lora_bf16
   lora_rank: 16
   lora_alpha: 32
   bf16: true
   mask_history: true          # loss só na última mensagem (7ª)
-  # Não usar ollama para treino QLoRA
+  num_train_epochs: 1
+  # Não usar ollama para treino
 
 inference:
-  # ollama | llamafactory | vllm
+  # ollama | vllm
   engine: ollama
   ollama:
     base_url: http://127.0.0.1:11434
     # Nome do modelo no Ollama após import (ex.: granite-3b, qwen35-4b-sft)
     model_i0: qwen35-4b
     model_sft: qwen35-4b-sft
-  # Se usar LangChain só para orquestrar RAG + chat:
   langchain:
     enabled: true
-    use_for: [rag, sft_rag]   # i0 e sft podem chamar Ollama direto
+    use_for: [rag, sft_rag]
 
 rag:
   # native = src/tcc/rag (sentence-transformers)
@@ -33,7 +31,6 @@ rag:
   top_k: 2
 
 evaluation:
-  # Fixo — protocolo do paper
   engine: worfeval
   repo: external/WorFBench
   script: node_eval.py
