@@ -3,7 +3,7 @@
 
 Ordem:
   1. download_model.py
-  2. finetune.py --export-merged          (pula com --skip-sft)
+  2. finetune.py --export-merged          (pula com --skip-sft ou --skip-finetune)
   3. ollama_import.py (base) + (SFT)
   4. Inferência paralela (2 modelos no Ollama):
        track base: I0 → RAG
@@ -19,6 +19,7 @@ Exemplos:
   python scripts/run_model.py --model qwen35-0.8b --limit 5
   python scripts/run_model.py --model qwen35-4b --quantize q4_K_M
   python scripts/run_model.py --model qwen35-0.8b --skip-sft
+  python scripts/run_model.py --model qwen35-0.8b --skip-finetune
   python scripts/run_model.py --model qwen35-0.8b --dry-run
 """
 
@@ -74,6 +75,11 @@ def main() -> None:
         help="Não treina nem importa/roda cenários SFT (só base: I0→RAG + eval)",
     )
     parser.add_argument(
+        "--skip-finetune",
+        action="store_true",
+        help="Não roda finetune.py (checkpoint SFT já existe); mantém Ollama SFT + infer/eval SFT",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Só imprime os comandos",
@@ -101,8 +107,8 @@ def main() -> None:
             dry_run=args.dry_run,
         )
 
-    if not args.skip_sft:
-        print(f"\n{'=' * 60}\nFine-tune QLoRA — {args.model}\n{'=' * 60}", flush=True)
+    if not args.skip_sft and not args.skip_finetune:
+        print(f"\n{'=' * 60}\nFine-tune SFT — {args.model}\n{'=' * 60}", flush=True)
         run_script(
             "finetune.py",
             "--model",

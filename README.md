@@ -30,6 +30,8 @@ python scripts/run_model.py --model qwen35-4b              # completo
 
 `run_model.py` faz: download → **SFT** → Ollama (base + SFT) → **infer paralelo** (base: I0→RAG ‖ SFT: SFT→SFT+RAG) → WorFEval de todos os cenários.
 
+Flags úteis: `--skip-download`, `--skip-finetune` (SFT já treinado), `--skip-sft` (só base I0/RAG), `--skip-ollama`.
+
 **Passo a passo manual:**
 
 ```text

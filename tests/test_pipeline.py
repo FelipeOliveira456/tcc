@@ -165,6 +165,26 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("worfeval.py", proc.stdout)
         self.assertNotIn("--finetuned", proc.stdout)
 
+    def test_run_model_skip_finetune_dry_run(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "run_model.py"),
+                "--model",
+                "qwen35-0.8b",
+                "--skip-finetune",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=str(ROOT),
+        )
+        self.assertNotIn("finetune.py", proc.stdout)
+        self.assertIn("ollama_import.py", proc.stdout)
+        self.assertIn("--finetuned", proc.stdout)
+        self.assertIn("Inferência paralela", proc.stdout)
+
     def test_run_model_full_dry_run_order(self) -> None:
         proc = subprocess.run(
             [
