@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tcc.backends.ollama_inference import (
@@ -12,7 +13,7 @@ from tcc.backends.ollama_inference import (
 )
 from tcc.config import load_config
 from tcc.inference.runner import build_prompt_messages
-from tcc.paths import prediction_path
+from tcc.paths import latest_prediction_path, prediction_path, prediction_scenario_from_filename
 from tcc.run_stamp import run_stamp
 
 
@@ -32,6 +33,47 @@ class OllamaInferenceTests(unittest.TestCase):
         s = run_stamp()
         self.assertEqual(len(s), 15)  # YYYYMMDD_HHMMSS
         self.assertEqual(s[8], "_")
+
+    def test_latest_prediction_path_does_not_confuse_sft_and_sft_rag(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            from tcc.config import load_config
+
+            cfg = load_config()
+            task_dir = Path(tmp) / "outputs" / "predictions" / "qwen35-0.8b" / "alfworld"
+            task_dir.mkdir(parents=True)
+            (task_dir / "graph_eval_sft_20260710_030000.json").write_text("[]", encoding="utf-8")
+            (task_dir / "graph_eval_sft_rag_20260710_040651.json").write_text(
+                "[]", encoding="utf-8"
+            )
+
+            with patch("tcc.paths.resolve_path") as mock_resolve:
+                mock_resolve.side_effect = (
+                    lambda _c, key: Path(tmp) / "outputs" if key == "outputs_dir" else Path(tmp) / key
+                )
+
+                got_sft = latest_prediction_path(
+                    cfg, "qwen35-0.8b", finetuned=True, rag=False, task="alfworld"
+                )
+                got_sft_rag = latest_prediction_path(
+                    cfg, "qwen35-0.8b", finetuned=True, rag=True, task="alfworld"
+                )
+                self.assertEqual(got_sft.name, "graph_eval_sft_20260710_030000.json")
+                self.assertEqual(got_sft_rag.name, "graph_eval_sft_rag_20260710_040651.json")
+
+    def test_prediction_scenario_from_filename(self) -> None:
+        self.assertEqual(
+            prediction_scenario_from_filename(
+                Path("graph_eval_sft_rag_20260710_040651.json")
+            ),
+            "sft_rag",
+        )
+        self.assertEqual(
+            prediction_scenario_from_filename(Path("graph_eval_sft_20260710_030000.json")),
+            "sft",
+        )
+        self.assertIsNone(prediction_scenario_from_filename(Path("graph_eval_sft.json")))
 
     def test_resolve_model_names(self) -> None:
         self.assertEqual(resolve_ollama_model_name(self.cfg, "qwen35-4b", False), "qwen35-4b")
