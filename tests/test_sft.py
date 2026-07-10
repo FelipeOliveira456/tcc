@@ -266,6 +266,23 @@ def test_dry_run_finetune(cfg):
     assert manifest["hparams"]["mask"] == "last_assistant_only"
 
 
+def test_modelfile_qwen35_sft_uses_base_plus_adapter(cfg, tmp_path: Path):
+    base = cfg["_project_root"] / "models" / "qwen35-0.8b"
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "config.json").write_text("{}", encoding="utf-8")
+    ckpt = cfg["_project_root"] / "checkpoints" / "qwen35-0.8b"
+    ckpt.mkdir(parents=True)
+    (ckpt / "adapter_config.json").write_text("{}", encoding="utf-8")
+    merged = ckpt / "merged"
+    merged.mkdir()
+    (merged / "model.safetensors").write_text("x", encoding="utf-8")
+
+    text = build_modelfile(cfg, "qwen35-0.8b", finetuned=True)
+    assert f"FROM {base}" in text
+    assert f"ADAPTER {ckpt}" in text
+    assert "merged" not in text
+
+
 def test_modelfile_generation(cfg):
     text = build_modelfile(cfg, "qwen35-0.8b", finetuned=False)
     assert "FROM" in text

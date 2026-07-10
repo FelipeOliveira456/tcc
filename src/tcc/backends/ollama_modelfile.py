@@ -6,7 +6,24 @@ from pathlib import Path
 from typing import Any
 
 from tcc.config import resolve_path
+from tcc.models_registry import get_sft_template
 from tcc.paths import checkpoint_dir, model_dir
+
+
+def _has_lora_adapter(path: Path) -> bool:
+    return (path / "adapter_config.json").is_file() or (
+        path / "adapter_model.safetensors"
+    ).is_file()
+
+
+def _qwen35_prefers_adapter_import(cfg: dict[str, Any], model_id: str) -> bool:
+    """Merge Unsloth pode omitir metadados vision → Ollama quebra (image_mean)."""
+    if model_id.startswith("qwen35"):
+        return True
+    try:
+        return get_sft_template(cfg, model_id).startswith("qwen3_5")
+    except KeyError:
+        return False
 
 
 def resolve_weights_dir(
@@ -34,6 +51,33 @@ def resolve_weights_dir(
     return weights
 
 
+def resolve_finetuned_ollama_sources(
+    cfg: dict[str, Any],
+    model_id: str,
+    *,
+    adapter_dir: Path | None = None,
+) -> tuple[Path, Path | None]:
+    """FROM + ADAPTER opcional para SFT no Ollama.
+
+    Qwen3.5: FROM base HF + ADAPTER LoRA (merge quebra vision no Ollama).
+    Outros: FROM merged/ckpt quando não há adapter explícito.
+    """
+    base = model_dir(cfg, model_id)
+    if adapter_dir is not None:
+        return base, adapter_dir
+
+    ckpt = checkpoint_dir(cfg, model_id)
+    if _qwen35_prefers_adapter_import(cfg, model_id) and _has_lora_adapter(ckpt):
+        if not base.is_dir() or not any(base.iterdir()):
+            raise FileNotFoundError(
+                f"Base HF necessária para ADAPTER em {base}. "
+                f"Rode download_model.py --model {model_id}."
+            )
+        return base, ckpt
+
+    return resolve_weights_dir(cfg, model_id, finetuned=True), None
+
+
 def build_modelfile(
     cfg: dict[str, Any],
     model_id: str,
@@ -45,11 +89,17 @@ def build_modelfile(
     """Conteúdo do Modelfile (FROM pesos locais; ADAPTER opcional para LoRA)."""
     ollama = cfg.get("inference", {}).get("ollama", {})
     temp = temperature if temperature is not None else float(ollama.get("temperature", 0.0))
-    weights = resolve_weights_dir(cfg, model_id, finetuned=finetuned and adapter_dir is None)
+    if finetuned:
+        weights, adapter = resolve_finetuned_ollama_sources(
+            cfg, model_id, adapter_dir=adapter_dir
+        )
+    else:
+        weights = resolve_weights_dir(cfg, model_id, finetuned=False)
+        adapter = adapter_dir
     lines = [f"# TCC — {model_id}" + (" (SFT)" if finetuned else " (base)")]
     lines.append(f"FROM {weights}")
-    if adapter_dir is not None:
-        lines.append(f"ADAPTER {adapter_dir}")
+    if adapter is not None:
+        lines.append(f"ADAPTER {adapter}")
     lines.append(f"PARAMETER temperature {temp}")
     return "\n".join(lines) + "\n"
 
