@@ -53,7 +53,7 @@ inference:
       llama_cpp_dir: external/llama.cpp
       llama_cpp_repo: https://github.com/ggerganov/llama.cpp.git
       llama_cpp_ref: master
-      outtype: q4_K_M
+      outtype: f16
       force_architectures:
         - GraniteForCausalLM
         - NemotronHForCausalLM

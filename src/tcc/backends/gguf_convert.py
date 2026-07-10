@@ -19,9 +19,26 @@ _DEFAULT_FORCE_ARCHITECTURES = (
     "NemotronForCausalLM",
 )
 
+# convert_hf_to_gguf.py — sem k-quants (sem quantização no pipeline).
+_CONVERT_OUTTYPES = frozenset({"f32", "f16", "bf16", "q8_0", "tq1_0", "tq2_0", "auto"})
+_DEFAULT_OUTTYPE = "f16"
+
 
 def gguf_cfg(cfg: dict[str, Any]) -> dict[str, Any]:
     return dict(cfg.get("inference", {}).get("ollama", {}).get("gguf") or {})
+
+
+def resolve_convert_outtype(cfg: dict[str, Any], outtype: str | None = None) -> str:
+    """Outtype válido para convert_hf_to_gguf (f16 por padrão; sem q4_K_M)."""
+    block = gguf_cfg(cfg)
+    raw = outtype or str(block.get("outtype", _DEFAULT_OUTTYPE))
+    if raw not in _CONVERT_OUTTYPES:
+        raise ValueError(
+            f"outtype GGUF inválido: {raw!r}. "
+            f"Use um de {sorted(_CONVERT_OUTTYPES)} "
+            "(pipeline sem quantização; padrão f16)."
+        )
+    return raw
 
 
 def llama_cpp_dir(cfg: dict[str, Any]) -> Path:
@@ -110,13 +127,12 @@ def convert_hf_dir_to_gguf(
     force: bool = False,
 ) -> Path:
     """
-    Converte diretório HF (safetensors) → arquivo .gguf.
+    Converte diretório HF (safetensors) → arquivo .gguf (f16 por padrão).
 
     Exige llama.cpp já clonado no setup (não clona aqui).
     Reusa outfile se já existir (salvo force=True).
     """
-    block = gguf_cfg(cfg)
-    outtype = outtype or str(block.get("outtype", "q4_K_M"))
+    outtype = resolve_convert_outtype(cfg, outtype)
     outfile = outfile.resolve()
     if outfile.is_file() and not force:
         print(f"[gguf] reusando {outfile}", flush=True)
@@ -149,8 +165,7 @@ def gguf_outfile_for(
     finetuned: bool,
     outtype: str | None = None,
 ) -> Path:
-    block = gguf_cfg(cfg)
-    outtype = outtype or str(block.get("outtype", "q4_K_M"))
+    outtype = resolve_convert_outtype(cfg, outtype)
     suffix = "-sft" if finetuned else ""
     name = f"{model_id}{suffix}-{outtype}.gguf"
     return resolve_path(cfg, "models_dir") / "ollama" / "gguf" / name

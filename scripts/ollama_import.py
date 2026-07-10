@@ -44,8 +44,8 @@ def main() -> None:
         "--quantize",
         default=None,
         help=(
-            "Quantização: no create safetensors (ex. q4_K_M) ou outtype do "
-            "convert_hf_to_gguf quando a rota GGUF for usada."
+            "Só no create safetensors (ex. q4_K_M). Na rota GGUF o outtype "
+            "vem de inference.ollama.gguf.outtype (padrão f16, sem quantização)."
         ),
     )
     parser.add_argument(
@@ -67,7 +67,6 @@ def main() -> None:
         args.model,
         finetuned=args.finetuned,
         adapter_dir=args.adapter,
-        outtype=args.quantize,
         force_gguf=args.force_gguf,
     )
     cmd = ollama_create_command(

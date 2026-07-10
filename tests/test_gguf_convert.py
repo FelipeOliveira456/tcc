@@ -10,6 +10,7 @@ from unittest.mock import patch
 from tcc.backends.gguf_convert import (
     needs_gguf_conversion,
     read_hf_architectures,
+    resolve_convert_outtype,
 )
 from tcc.backends.ollama_modelfile import (
     build_modelfile,
@@ -135,7 +136,7 @@ class GgufConvertTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (weights / "model.safetensors").write_text("w", encoding="utf-8")
-            gguf = root / "models" / "ollama" / "gguf" / "granite-3b-q4_K_M.gguf"
+            gguf = root / "models" / "ollama" / "gguf" / "granite-3b-f16.gguf"
             gguf.parent.mkdir(parents=True)
             gguf.write_bytes(b"gguf")
             mock_convert.return_value = gguf
@@ -152,7 +153,7 @@ class GgufConvertTests(unittest.TestCase):
                         "temperature": 0.0,
                         "gguf": {
                             "enabled": True,
-                            "outtype": "q4_K_M",
+                            "outtype": "f16",
                             "force_architectures": ["GraniteForCausalLM"],
                         },
                     }
@@ -191,7 +192,7 @@ class GgufConvertTests(unittest.TestCase):
                     "ollama": {
                         "gguf": {
                             "llama_cpp_dir": str(root / "missing-llama"),
-                            "outtype": "q4_K_M",
+                            "outtype": "f16",
                         }
                     }
                 },
@@ -210,6 +211,13 @@ class GgufConvertTests(unittest.TestCase):
             self.assertTrue(modelfile_uses_gguf(mf))
             mf.write_text("FROM /tmp/weights\n", encoding="utf-8")
             self.assertFalse(modelfile_uses_gguf(mf))
+
+    def test_resolve_outtype_rejects_k_quants(self) -> None:
+        cfg = {"inference": {"ollama": {"gguf": {"outtype": "q4_K_M"}}}}
+        with self.assertRaises(ValueError) as ctx:
+            resolve_convert_outtype(cfg)
+        self.assertIn("f16", str(ctx.exception))
+        self.assertEqual(resolve_convert_outtype({"inference": {"ollama": {"gguf": {}}}}), "f16")
 
     def test_ollama_create_skips_quantize_for_gguf(self) -> None:
         import tempfile

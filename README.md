@@ -110,11 +110,10 @@ arquitetura exigir GGUF (`GraniteForCausalLM`, etc.), `ollama_import.py` só rod
 ```bash
 python scripts/setup_llama_cpp.py   # ou setup_project.py (passo 4/4)
 python scripts/ollama_import.py --model granite-3b --run
-# opcional: outtype do convert (= --quantize na CLI)
-python scripts/ollama_import.py --model granite-3b --quantize q4_K_M --run
+# GGUF sai em f16 (sem quantização); outtype em inference.ollama.gguf.outtype
 ```
 
-Config: `inference.ollama.gguf` em `config/default.yaml` (`force_architectures`, `outtype`,
+Config: `inference.ollama.gguf` em `config/default.yaml` (`force_architectures`, `outtype: f16`,
 `llama_cpp_dir`). Por modelo: `ollama_via_gguf: true`.
 
 **Opção B — manual** (equivalente):
@@ -128,7 +127,7 @@ EOF
 ollama create qwen35-0.8b -f Modelfile
 ```
 
-**Quantização na importação** (menos VRAM; modelos FP16/BF16 do HF):
+**Quantização opcional** (só create safetensors; rota GGUF não quantiza):
 
 ```bash
 python scripts/ollama_import.py --model qwen35-4b --quantize q4_K_M --run
