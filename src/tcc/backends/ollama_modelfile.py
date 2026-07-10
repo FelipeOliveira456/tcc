@@ -7,6 +7,11 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from tcc.backends.gguf_convert import (
+    convert_hf_dir_to_gguf,
+    gguf_outfile_for,
+    needs_gguf_conversion,
+)
 from tcc.config import resolve_path
 from tcc.models_registry import get_sft_template
 from tcc.paths import checkpoint_dir, model_dir
@@ -122,6 +127,36 @@ def resolve_finetuned_ollama_sources(
     return resolve_weights_dir(cfg, model_id, finetuned=True), None
 
 
+def resolve_ollama_from_path(
+    cfg: dict[str, Any],
+    model_id: str,
+    weights: Path,
+    *,
+    finetuned: bool,
+    adapter: Path | None = None,
+    outtype: str | None = None,
+    force_gguf: bool = False,
+) -> tuple[Path, Path | None, bool]:
+    """
+    Resolve FROM do Modelfile: diretório safetensors ou arquivo .gguf.
+
+    Retorna (from_path, adapter_or_none, used_gguf).
+    Se a arquitetura exigir GGUF (ex. Granite), converte via llama.cpp.
+    ADAPTER + GGUF não é suportado — use merge (--export-merged).
+    """
+    need = force_gguf or needs_gguf_conversion(cfg, model_id, weights)
+    if not need:
+        return weights, adapter, False
+    if adapter is not None:
+        raise ValueError(
+            f"Modelo {model_id}: Ollama via GGUF não combina com ADAPTER. "
+            "Rode finetune.py --export-merged e importe com --finetuned (sem --adapter)."
+        )
+    outfile = gguf_outfile_for(cfg, model_id, finetuned=finetuned, outtype=outtype)
+    gguf = convert_hf_dir_to_gguf(cfg, weights, outfile, outtype=outtype)
+    return gguf, None, True
+
+
 def build_modelfile(
     cfg: dict[str, Any],
     model_id: str,
@@ -129,8 +164,10 @@ def build_modelfile(
     finetuned: bool,
     adapter_dir: Path | None = None,
     temperature: float | None = None,
+    outtype: str | None = None,
+    force_gguf: bool = False,
 ) -> str:
-    """Conteúdo do Modelfile (FROM pesos locais safetensors)."""
+    """Conteúdo do Modelfile (FROM safetensors ou GGUF quando necessário)."""
     ollama = cfg.get("inference", {}).get("ollama", {})
     temp = temperature if temperature is not None else float(ollama.get("temperature", 0.0))
     adapter: Path | None = None
@@ -140,8 +177,20 @@ def build_modelfile(
         )
     else:
         weights = resolve_weights_dir(cfg, model_id, finetuned=False)
-    lines = [f"# TCC — {model_id}" + (" (SFT)" if finetuned else " (base)")]
-    lines.append(f"FROM {weights}")
+    from_path, adapter, used_gguf = resolve_ollama_from_path(
+        cfg,
+        model_id,
+        weights,
+        finetuned=finetuned,
+        adapter=adapter,
+        outtype=outtype,
+        force_gguf=force_gguf,
+    )
+    tag = " (SFT)" if finetuned else " (base)"
+    if used_gguf:
+        tag += " [GGUF]"
+    lines = [f"# TCC — {model_id}{tag}"]
+    lines.append(f"FROM {from_path}")
     if adapter is not None:
         lines.append(f"ADAPTER {adapter}")
     lines.append(f"PARAMETER temperature {temp}")
@@ -154,13 +203,22 @@ def write_modelfile(
     *,
     finetuned: bool,
     adapter_dir: Path | None = None,
+    outtype: str | None = None,
+    force_gguf: bool = False,
 ) -> Path:
     out_dir = resolve_path(cfg, "models_dir") / "ollama"
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = "-sft" if finetuned else ""
     path = out_dir / f"Modelfile.{model_id}{suffix}"
     path.write_text(
-        build_modelfile(cfg, model_id, finetuned=finetuned, adapter_dir=adapter_dir),
+        build_modelfile(
+            cfg,
+            model_id,
+            finetuned=finetuned,
+            adapter_dir=adapter_dir,
+            outtype=outtype,
+            force_gguf=force_gguf,
+        ),
         encoding="utf-8",
     )
     return path
@@ -174,6 +232,14 @@ def resolve_ollama_create_name(cfg: dict[str, Any], model_id: str, *, finetuned:
     return per_model.get("base") or model_id
 
 
+def modelfile_uses_gguf(modelfile: Path) -> bool:
+    """True se o Modelfile aponta FROM para um .gguf (já quantizado na conversão)."""
+    for line in modelfile.read_text(encoding="utf-8").splitlines():
+        if line.upper().startswith("FROM ") and line.strip().lower().endswith(".gguf"):
+            return True
+    return False
+
+
 def ollama_create_argv(
     cfg: dict[str, Any],
     model_id: str,
@@ -184,7 +250,8 @@ def ollama_create_argv(
 ) -> list[str]:
     name = resolve_ollama_create_name(cfg, model_id, finetuned=finetuned)
     cmd = ["ollama", "create", name, "-f", str(modelfile)]
-    if quantize:
+    # GGUF já sai com outtype; --quantize no create seria redundante/conflitante.
+    if quantize and not modelfile_uses_gguf(modelfile):
         cmd.extend(["--quantize", quantize])
     return cmd
 

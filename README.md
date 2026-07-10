@@ -102,6 +102,19 @@ python scripts/ollama_import.py --model qwen35-0.8b --run
 # ou execute o comando impresso manualmente
 ```
 
+**Granite / Nemotron (GGUF automático):** se a arquitetura não for convertível pelo Ollama
+(`GraniteForCausalLM`, etc.), `ollama_import.py` clona `external/llama.cpp`, roda
+`convert_hf_to_gguf.py` e cria o modelo a partir do `.gguf` em `models/ollama/gguf/`.
+
+```bash
+python scripts/ollama_import.py --model granite-3b --run
+# opcional: outtype do convert (= --quantize na CLI)
+python scripts/ollama_import.py --model granite-3b --quantize q4_K_M --run
+```
+
+Config: `inference.ollama.gguf` em `config/default.yaml` (`force_architectures`, `outtype`,
+`llama_cpp_dir`). Por modelo: `ollama_via_gguf: true`.
+
 **Opção B — manual** (equivalente):
 
 ```bash
@@ -163,9 +176,10 @@ Preferir **merge + create** para reprodutibilidade; adapter direto exige base id
 | Família | Import safetensors | Chat template (tokenizer HF) |
 |---------|-------------------|------------------------------|
 | Qwen3.5 | Ollama ≥0.17 com suporte qwen35; senão GGUF via llama.cpp | Qwen3.5 / `enable_thinking=False` |
-| Granite 4.1 | safetensors ou quantize na create | Granite |
+| Granite 4.1 | **GGUF via llama.cpp** (safetensors direto falha: `GraniteForCausalLM`) | Granite |
 | Gemma 3 | safetensors; licença Google no HF | Gemma |
-| Ministral 3 | safetensors (arquitetura Mistral) | Ministral |
+| Ministral 3 | **BF16** (`…-Instruct-2512-BF16`); FP8 quebra `ollama create` | Ministral |
+| Nemotron 3 Nano 4B | **GGUF via llama.cpp** (híbrido) ou `ollama pull nemotron-3-nano:4b` | Nemotron |
 
 Modelos grandes: se `ollama create` estourar memória, use `GOMAXPROCS=1 ollama create ...`.
 
@@ -271,7 +285,8 @@ Apelido **sem ponto** (seguro no bash). Nome oficial no HF pode ter ponto (ex.: 
 | `qwen35-4b` | [Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | Qwen3.5 4B |
 | `gemma3-1b` | [google/gemma-3-1b-it](https://huggingface.co/google/gemma-3-1b-it) | Gemma 3 1B (licença Google no HF) |
 | `gemma3-4b` | [google/gemma-3-4b-it](https://huggingface.co/google/gemma-3-4b-it) | Gemma 3 4B |
-| `ministral-3-3b` | [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) | Ministral 3 3B |
+| `ministral-3-3b` | [mistralai/Ministral-3-3B-Instruct-2512-BF16](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-BF16) | Ministral 3 3B (BF16; texto no WorFBench) |
+| `nemotron-nano-4b` | [nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16) | Nemotron 3 Nano 4B (híbrido) |
 
 Exemplo: `python scripts/download_model.py --model qwen35-4b`
 

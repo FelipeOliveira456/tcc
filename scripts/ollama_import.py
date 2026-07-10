@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Gera Modelfile e comando `ollama create` para pesos HF locais."""
+"""Gera Modelfile e comando `ollama create` para pesos HF locais.
+
+Se a arquitetura não for convertível pelo Ollama (ex. GraniteForCausalLM),
+converte safetensors → GGUF via llama.cpp (clone em external/llama.cpp) e
+usa FROM no .gguf.
+"""
 
 from __future__ import annotations
 
@@ -38,7 +43,15 @@ def main() -> None:
     parser.add_argument(
         "--quantize",
         default=None,
-        help="Quantização na criação (ex.: q4_K_M, q8_0). Modelos FP16/BF16 no HF.",
+        help=(
+            "Quantização: no create safetensors (ex. q4_K_M) ou outtype do "
+            "convert_hf_to_gguf quando a rota GGUF for usada."
+        ),
+    )
+    parser.add_argument(
+        "--force-gguf",
+        action="store_true",
+        help="Força conversão GGUF via llama.cpp (mesmo se a arquitetura for suportada)",
     )
     parser.add_argument(
         "--run",
@@ -54,6 +67,8 @@ def main() -> None:
         args.model,
         finetuned=args.finetuned,
         adapter_dir=args.adapter,
+        outtype=args.quantize,
+        force_gguf=args.force_gguf,
     )
     cmd = ollama_create_command(
         cfg,

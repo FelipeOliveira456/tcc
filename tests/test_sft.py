@@ -353,5 +353,9 @@ def test_registry_templates_from_default_config():
     cfg = load_config()
     assert get_sft_template(cfg, "qwen35-4b") == "qwen3_5_nothink"
     assert get_sft_template(cfg, "granite-3b") == "granite4"
-    slm_ids = [s["id"] for s in cfg["models"]["slm"]]
-    assert "nemotron-nano-4b" not in slm_ids
+    assert get_sft_template(cfg, "ministral-3-3b") == "ministral3"
+    assert get_sft_template(cfg, "nemotron-nano-4b") == "nemotron"
+    by_id = {s["id"]: s for s in cfg["models"]["slm"]}
+    assert by_id["ministral-3-3b"]["hf_id"].endswith("BF16")
+    assert by_id["nemotron-nano-4b"]["hf_id"] == "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"
+    assert by_id["nemotron-nano-4b"].get("trust_remote_code") is True

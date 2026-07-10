@@ -17,6 +17,7 @@ _TEMPLATE_BY_ID: dict[str, str] = {
     "gemma3-1b": "gemma3",
     "gemma3-4b": "gemma3",
     "ministral-3-3b": "ministral3",
+    "nemotron-nano-4b": "nemotron",
 }
 
 

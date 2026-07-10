@@ -46,6 +46,18 @@ inference:
     temperature: 0.0
     num_predict: 4096
     sft_suffix: "-sft"
+    # Safetensors → GGUF via llama.cpp quando ollama create não converte a arquitetura
+    # (ex. GraniteForCausalLM — PR ollama#8319 ainda aberto).
+    gguf:
+      enabled: true
+      llama_cpp_dir: external/llama.cpp
+      llama_cpp_repo: https://github.com/ggerganov/llama.cpp.git
+      llama_cpp_ref: master
+      outtype: q4_K_M
+      force_architectures:
+        - GraniteForCausalLM
+        - NemotronHForCausalLM
+        - NemotronForCausalLM
     # Opcional por modelo:
     # models:
     #   qwen35-4b:
@@ -57,6 +69,7 @@ models:
     - id: granite-3b
       hf_id: ibm-granite/granite-4.1-3b
       sft_template: granite4
+      ollama_via_gguf: true
     - id: qwen35-0.8b
       hf_id: Qwen/Qwen3.5-0.8B
       sft_template: qwen3_5_nothink
@@ -73,8 +86,14 @@ models:
       hf_id: google/gemma-3-4b-it
       sft_template: gemma3
     - id: ministral-3-3b
-      hf_id: mistralai/Ministral-3-3B-Instruct-2512
+      # FP8 default quebra ollama create; BF16 (oficial) para texto/WorFBench
+      hf_id: mistralai/Ministral-3-3B-Instruct-2512-BF16
       sft_template: ministral3
+    - id: nemotron-nano-4b
+      hf_id: nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+      sft_template: nemotron
+      trust_remote_code: true
+      ollama_via_gguf: true
   baseline_non_slm:
     - id: qwen35-27b
       hf_id: Qwen/Qwen3.5-27B
