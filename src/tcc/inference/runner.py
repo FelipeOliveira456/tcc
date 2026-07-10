@@ -68,6 +68,8 @@ def run_inference(
     generate_fn: Callable[[list[dict[str, str]], str, bool], str],
     tasks: list[str] | None = None,
     limit: int | None = None,
+    progress_desc_prefix: str = "",
+    progress_position: int | None = None,
 ) -> Path:
     """
     generate_fn(messages, model_id, finetuned) -> texto do workflow predito.
@@ -86,8 +88,12 @@ def run_inference(
 
         preds = []
         subset = gold_data[:limit] if limit else gold_data
-        desc = f"{task} ({model_id})"
-        for item in tqdm(subset, desc=desc, unit="ex"):
+        desc = f"{progress_desc_prefix}{task} ({model_id})".strip()
+        tqdm_kwargs: dict[str, Any] = {"desc": desc, "unit": "ex", "dynamic_ncols": True}
+        if progress_position is not None:
+            tqdm_kwargs["position"] = progress_position
+            tqdm_kwargs["leave"] = True
+        for item in tqdm(subset, **tqdm_kwargs):
             messages = build_prompt_messages(
                 item, use_rag=use_rag, cfg=cfg, retriever=retriever
             )

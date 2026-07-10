@@ -41,6 +41,17 @@ def main() -> None:
         action="store_true",
         help="Só mostra caminhos de saída, sem chamar o modelo",
     )
+    parser.add_argument(
+        "--progress-position",
+        type=int,
+        default=None,
+        help="Linha fixa do tqdm (0=base, 1=sft) para barras paralelas no mesmo terminal",
+    )
+    parser.add_argument(
+        "--progress-prefix",
+        default="",
+        help="Prefixo do tqdm, ex. base/I0:",
+    )
     args = parser.parse_args()
     cfg = load_config(args.config)
     get_model_spec(cfg, args.model)
@@ -67,6 +78,8 @@ def main() -> None:
         generate_fn=generate_fn,
         tasks=[args.task] if args.task else None,
         limit=args.limit,
+        progress_desc_prefix=f"{args.progress_prefix}: " if args.progress_prefix else "",
+        progress_position=args.progress_position,
     )
     print(f"predições em: {out.parent} (ollama={ollama_name}, stamp no nome do arquivo)")
 

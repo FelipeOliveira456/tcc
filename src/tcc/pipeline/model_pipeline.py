@@ -5,6 +5,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from tcc.backends.ollama_inference import make_generate_fn
+from tcc.config import load_config
+from tcc.inference.runner import run_inference
 from tcc.pipeline.steps import run_script
 
 
@@ -74,13 +77,31 @@ def run_infer(
     limit: int | None,
     task: str | None,
     dry_run: bool,
+    progress_desc_prefix: str = "",
+    progress_position: int | None = None,
 ) -> None:
     print(f"\n{'=' * 60}\n{label}\n{'=' * 60}", flush=True)
-    run_script(
-        "infer.py",
-        *build_infer_args(model, rag=rag, finetuned=finetuned, limit=limit, task=task),
-        config=config,
-        dry_run=dry_run,
+    if dry_run or progress_position is None:
+        run_script(
+            "infer.py",
+            *build_infer_args(model, rag=rag, finetuned=finetuned, limit=limit, task=task),
+            config=config,
+            dry_run=dry_run,
+        )
+        return
+
+    cfg = load_config(config)
+    generate_fn = make_generate_fn(cfg)
+    run_inference(
+        cfg,
+        model,
+        finetuned=finetuned,
+        use_rag=rag,
+        generate_fn=generate_fn,
+        tasks=[task] if task else None,
+        limit=limit,
+        progress_desc_prefix=progress_desc_prefix,
+        progress_position=progress_position,
     )
 
 
@@ -143,6 +164,12 @@ def infer_and_eval(
     )
 
 
+def _scenario_labels(finetuned: bool) -> tuple[str, str]:
+    if finetuned:
+        return "SFT", "SFT+RAG"
+    return "I0", "RAG"
+
+
 def run_infer_track(
     *,
     track_label: str,
@@ -152,6 +179,7 @@ def run_infer_track(
     limit: int | None,
     task: str | None,
     dry_run: bool,
+    progress_position: int | None = None,
 ) -> None:
     """Uma linha de inferência: (I0 → RAG) ou (SFT → SFT+RAG)."""
     prefix = "SFT" if finetuned else "base"
@@ -159,8 +187,10 @@ def run_infer_track(
         f"\n{'#' * 60}\nTrack {track_label} ({prefix}) — inferência sequencial\n{'#' * 60}",
         flush=True,
     )
+    scenario_a, scenario_b = _scenario_labels(finetuned)
+    desc_prefix = f"{track_label}/{scenario_a}: " if progress_position is not None else ""
     run_infer(
-        label=f"{track_label}: {'SFT' if finetuned else 'I0'}",
+        label=f"{track_label}: {scenario_a}",
         model=model,
         rag=False,
         finetuned=finetuned,
@@ -168,9 +198,12 @@ def run_infer_track(
         limit=limit,
         task=task,
         dry_run=dry_run,
+        progress_desc_prefix=desc_prefix,
+        progress_position=progress_position,
     )
+    desc_prefix = f"{track_label}/{scenario_b}: " if progress_position is not None else ""
     run_infer(
-        label=f"{track_label}: {'SFT+RAG' if finetuned else 'RAG'}",
+        label=f"{track_label}: {scenario_b}",
         model=model,
         rag=True,
         finetuned=finetuned,
@@ -178,6 +211,8 @@ def run_infer_track(
         limit=limit,
         task=task,
         dry_run=dry_run,
+        progress_desc_prefix=desc_prefix,
+        progress_position=progress_position,
     )
 
 
@@ -203,8 +238,20 @@ def run_parallel_infer_tracks(
     }
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = {
-            pool.submit(run_infer_track, track_label="base", finetuned=False, **common): "base",
-            pool.submit(run_infer_track, track_label="sft", finetuned=True, **common): "sft",
+            pool.submit(
+                run_infer_track,
+                track_label="base",
+                finetuned=False,
+                progress_position=0,
+                **common,
+            ): "base",
+            pool.submit(
+                run_infer_track,
+                track_label="sft",
+                finetuned=True,
+                progress_position=1,
+                **common,
+            ): "sft",
         }
         errors: list[tuple[str, BaseException]] = []
         for fut in as_completed(futures):
