@@ -111,6 +111,8 @@ def run_eval_task(
         task,
         "--worfbench-repo",
         str(repo),
+        "--eval-device",
+        wb.get("eval_device", "cpu"),
     ]
     if dry_run:
         print("[dry-run]", " ".join(cmd))

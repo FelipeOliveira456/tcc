@@ -53,6 +53,7 @@ def test_skips_empty_pred_without_crash(tmp_path: Path, worfbench_repo: Path) ->
 
     assert result["n_total"] == 3
     assert result["n_skipped_unparseable"] == 3
+    assert result.get("n_skipped_runtime", 0) == 0
     assert result["n_evaluated"] == 0
     assert result["f1_score"] == 0.0
     saved = json.loads(out_path.read_text(encoding="utf-8"))

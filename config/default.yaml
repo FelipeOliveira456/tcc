@@ -31,6 +31,8 @@ worfbench:
     - webshop
     - os
   eval_encoder: all-mpnet-base-v2
+  # CPU evita conflito com Ollama/GPU e erros cudaErrorLaunchFailure no MPNet.
+  eval_device: cpu
   eval_types:
     - node
     - graph

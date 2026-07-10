@@ -44,11 +44,15 @@ def eval_workflow(
     eval_output: str,
     *,
     worfbench_repo: Path,
+    eval_device: str = "cpu",
 ) -> dict[str, Any]:
+    if eval_device == "cpu":
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
     from sentence_transformers import SentenceTransformer
 
     workflow_to_graph_list, t_eval_nodes, t_eval_graph = _load_worfbench_eval(worfbench_repo)
-    sentence_model = SentenceTransformer(eval_model)
+    sentence_model = SentenceTransformer(eval_model, device=eval_device)
 
     eval_output_dir = os.path.dirname(eval_output)
     if eval_output_dir:
@@ -70,7 +74,8 @@ def eval_workflow(
     all_precision = 0.0
     all_recall = 0.0
     all_f1_score = 0.0
-    skipped = 0
+    skipped_unparseable = 0
+    skipped_runtime = 0
 
     with tqdm(total=len(gold_plan)) as pbar:
         for i in range(len(gold_plan)):
@@ -82,20 +87,27 @@ def eval_workflow(
                 or not _real_nodes(pred_graph_workflow)
                 or not _real_nodes(gold_graph_workflow)
             ):
-                skipped += 1
+                skipped_unparseable += 1
                 pbar.update(1)
                 continue
 
-            if eval_type == "node":
-                eval_result = t_eval_nodes(
-                    pred_graph_workflow, gold_graph_workflow, sentence_model
-                )
-            elif eval_type == "graph":
-                eval_result = t_eval_graph(
-                    pred_graph_workflow, gold_graph_workflow, sentence_model
-                )
-            else:
-                raise ValueError(f"eval_type inválido: {eval_type}")
+            try:
+                if eval_type == "node":
+                    eval_result = t_eval_nodes(
+                        pred_graph_workflow, gold_graph_workflow, sentence_model
+                    )
+                elif eval_type == "graph":
+                    eval_result = t_eval_graph(
+                        pred_graph_workflow, gold_graph_workflow, sentence_model
+                    )
+                else:
+                    raise ValueError(f"eval_type inválido: {eval_type}")
+            except (RuntimeError, ValueError) as exc:
+                skipped_runtime += 1
+                if skipped_runtime <= 3:
+                    print(f"[skip runtime] exemplo {i}: {exc}")
+                pbar.update(1)
+                continue
 
             all_precision += eval_result["precision"]
             all_recall += eval_result["recall"]
@@ -103,13 +115,16 @@ def eval_workflow(
             pbar.update(1)
 
     n_total = len(gold_plan)
+    skipped = skipped_unparseable + skipped_runtime
     result = {
         "precision": all_precision / n_total,
         "recall": all_recall / n_total,
         "f1_score": all_f1_score / n_total,
         "n_total": n_total,
         "n_evaluated": n_total - skipped,
-        "n_skipped_unparseable": skipped,
+        "n_skipped_unparseable": skipped_unparseable,
+        "n_skipped_runtime": skipped_runtime,
+        "eval_device": eval_device,
     }
     with open(eval_output, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, ensure_ascii=False)
@@ -117,9 +132,14 @@ def eval_workflow(
     print(f"Average Precision:{result['precision']}")
     print(f"Average Recall:{result['recall']}")
     print(f"Average F1_score:{result['f1_score']}")
-    if skipped:
+    if skipped_unparseable:
         print(
-            f"Skipped unparseable predictions: {skipped}/{n_total} "
+            f"Skipped unparseable predictions: {skipped_unparseable}/{n_total} "
+            "(counted as 0 in averages)"
+        )
+    if skipped_runtime:
+        print(
+            f"Skipped runtime errors: {skipped_runtime}/{n_total} "
             "(counted as 0 in averages)"
         )
     print("=========================================")
@@ -135,6 +155,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--eval_output", required=True)
     parser.add_argument("--task_type", default="wikihow")
     parser.add_argument(
+        "--eval-device",
+        default="cpu",
+        help="Dispositivo do sentence-transformers (cpu recomendado com Ollama na GPU)",
+    )
+    parser.add_argument(
         "--worfbench-repo",
         type=Path,
         default=Path("external/WorFBench"),
@@ -149,6 +174,7 @@ def main(argv: list[str] | None = None) -> None:
         args.eval_type,
         args.eval_output,
         worfbench_repo=args.worfbench_repo,
+        eval_device=args.eval_device,
     )
 
 
