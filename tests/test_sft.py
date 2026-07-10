@@ -24,7 +24,11 @@ from tcc.finetune.dataset import (
     prepare_sharegpt_dataset,
 )
 from tcc.finetune.sft import run_finetune
-from tcc.finetune.unsloth_sft import build_masked_example
+from tcc.finetune.unsloth_sft import (
+    build_masked_example,
+    encode_text_ids,
+    text_tokenizer,
+)
 from tcc.models_registry import get_sft_template
 
 
@@ -47,6 +51,22 @@ class _FakeTok:
         # 1 char ≈ 1 token (só para teste)
         ids = list(range(min(len(text), max_length)))
         return {"input_ids": ids}
+
+    def encode(self, text, truncation=True, max_length=2048, add_special_tokens=False):
+        return list(range(min(len(text), max_length)))
+
+
+class _FakeProcessor:
+    """Simula Processor multimodal (Qwen3.5) que quebra tokenizer(text)."""
+
+    def __init__(self):
+        self.tokenizer = _FakeTok()
+
+    def apply_chat_template(self, *args, **kwargs):
+        return self.tokenizer.apply_chat_template(*args, **kwargs)
+
+    def __call__(self, *_args, **_kwargs):
+        raise ValueError("processor multimodal não deve tokenizar texto puro")
 
 
 @pytest.fixture
@@ -131,6 +151,19 @@ def test_masked_example_keeps_only_last_assistant():
     first_train = next(i for i, v in enumerate(ex["labels"]) if v != -100)
     assert first_train > 0
     assert all(v == -100 for v in ex["labels"][:first_train])
+
+
+def test_text_tokenizer_unwraps_multimodal_processor():
+    proc = _FakeProcessor()
+    assert text_tokenizer(proc) is proc.tokenizer
+    msgs = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "u"},
+        {"role": "assistant", "content": "gold"},
+    ]
+    ex = build_masked_example(proc, msgs, max_seq_length=2048)
+    assert ex is not None
+    assert encode_text_ids(proc, "hello", max_length=10) == [0, 1, 2, 3, 4]
 
 
 def test_prepare_sharegpt_drops_overlong_examples(tmp_path: Path):

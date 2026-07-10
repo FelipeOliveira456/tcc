@@ -14,6 +14,35 @@ from typing import Any
 from tcc.paths import checkpoint_dir, model_dir
 
 
+def text_tokenizer(tokenizer_or_processor: Any) -> Any:
+    """Tokenizer de texto puro (Qwen3.5 retorna Processor multimodal)."""
+    inner = getattr(tokenizer_or_processor, "tokenizer", None)
+    if inner is not None and inner is not tokenizer_or_processor:
+        return inner
+    return tokenizer_or_processor
+
+
+def encode_text_ids(
+    tokenizer_or_processor: Any, text: str, *, max_length: int
+) -> list[int]:
+    """Tokeniza string sem passar pelo image_processor do Qwen3.5-VL."""
+    tok = text_tokenizer(tokenizer_or_processor)
+    if hasattr(tok, "encode"):
+        return tok.encode(
+            text,
+            truncation=True,
+            max_length=max_length,
+            add_special_tokens=False,
+        )
+    out = tok(
+        text,
+        truncation=True,
+        max_length=max_length,
+        add_special_tokens=False,
+    )
+    return out["input_ids"]
+
+
 def _apply_chat_template(
     tokenizer: Any,
     messages: list[dict[str, str]],
@@ -45,18 +74,8 @@ def build_masked_example(
         tokenizer, messages[:-1], add_generation_prompt=True
     )
 
-    full_ids = tokenizer(
-        full_text,
-        truncation=True,
-        max_length=max_seq_length,
-        add_special_tokens=False,
-    )["input_ids"]
-    prefix_ids = tokenizer(
-        prefix_text,
-        truncation=True,
-        max_length=max_seq_length,
-        add_special_tokens=False,
-    )["input_ids"]
+    full_ids = encode_text_ids(tokenizer, full_text, max_length=max_seq_length)
+    prefix_ids = encode_text_ids(tokenizer, prefix_text, max_length=max_seq_length)
 
     if not full_ids:
         return None
@@ -144,7 +163,7 @@ def run_unsloth_train(
     load_in_4bit = bool(sft.get("load_in_4bit", False))
     load_in_16bit = bool(sft.get("load_in_16bit", not load_in_4bit))
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
+    model, tokenizer_or_processor = FastLanguageModel.from_pretrained(
         model_name=model_name,
         max_seq_length=max_seq,
         load_in_4bit=load_in_4bit,
@@ -152,11 +171,11 @@ def run_unsloth_train(
         full_finetuning=False,
         dtype=None,
     )
+    text_tok = text_tokenizer(tokenizer_or_processor)
 
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=int(sft.get("lora_rank", 16)),
-        target_modules=[
+    peft_kwargs: dict[str, Any] = {
+        "r": int(sft.get("lora_rank", 16)),
+        "target_modules": [
             "q_proj",
             "k_proj",
             "v_proj",
@@ -165,19 +184,29 @@ def run_unsloth_train(
             "up_proj",
             "down_proj",
         ],
-        lora_alpha=int(sft.get("lora_alpha", 32)),
-        lora_dropout=float(sft.get("lora_dropout", 0.0)),
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-        random_state=seed,
-        max_seq_length=max_seq,
-    )
+        "lora_alpha": int(sft.get("lora_alpha", 32)),
+        "lora_dropout": float(sft.get("lora_dropout", 0.0)),
+        "bias": "none",
+        "use_gradient_checkpointing": "unsloth",
+        "random_state": seed,
+        "max_seq_length": max_seq,
+    }
+    # Qwen3.5 é multimodal: WorFBench é só texto — não treinar vision tower.
+    if "qwen3" in model_name.lower():
+        peft_kwargs.update(
+            finetune_vision_layers=False,
+            finetune_language_layers=True,
+            finetune_attention_modules=True,
+            finetune_mlp_modules=True,
+        )
+
+    model = FastLanguageModel.get_peft_model(model, **peft_kwargs)
 
     conversations = load_sharegpt_messages(dataset_path)
     rows: list[dict[str, list[int]]] = []
     skipped = 0
     for msgs in conversations:
-        ex = build_masked_example(tokenizer, msgs, max_seq_length=max_seq)
+        ex = build_masked_example(tokenizer_or_processor, msgs, max_seq_length=max_seq)
         if ex is None:
             skipped += 1
             continue
@@ -195,8 +224,8 @@ def run_unsloth_train(
     )
     train_ds = Dataset.from_list(rows)
 
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    if text_tok.pad_token is None:
+        text_tok.pad_token = text_tok.eos_token
 
     epochs = float(sft.get("num_train_epochs", 1))
     # Dataset já tokenizado + labels mascarados → Trainer HF (evita re-prep do TRL).
@@ -222,7 +251,7 @@ def run_unsloth_train(
         ),
         train_dataset=train_ds,
         data_collator=DataCollatorForSeq2Seq(
-            tokenizer=tokenizer,
+            tokenizer=text_tok,
             padding=True,
             pad_to_multiple_of=8,
             label_pad_token_id=-100,
@@ -231,13 +260,13 @@ def run_unsloth_train(
 
     trainer.train()
     model.save_pretrained(str(ckpt))
-    tokenizer.save_pretrained(str(ckpt))
+    text_tok.save_pretrained(str(ckpt))
 
     if export_merged:
         merged_dir.mkdir(parents=True, exist_ok=True)
         model.save_pretrained_merged(
             str(merged_dir),
-            tokenizer,
+            text_tok,
             save_method="merged_16bit",
         )
         print(f"[unsloth-sft] merged → {merged_dir}", flush=True)
