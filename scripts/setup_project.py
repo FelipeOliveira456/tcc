@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Setup único do projeto: dados, índice RAG e WorFEval.
+"""Setup único do projeto: dados, índice RAG, WorFEval e llama.cpp.
 
 Equivalente a:
   python scripts/download_data.py
   python scripts/build_vector_db.py
   python scripts/worfeval.py --setup
+  python scripts/setup_llama_cpp.py
 """
 
 from __future__ import annotations

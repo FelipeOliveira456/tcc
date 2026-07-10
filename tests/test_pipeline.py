@@ -28,14 +28,15 @@ ROOT = Path(__file__).resolve().parents[1]
 class PipelineTests(unittest.TestCase):
     def test_setup_steps_default(self) -> None:
         steps = setup_steps()
-        self.assertEqual(len(steps), 3)
+        self.assertEqual(len(steps), 4)
         self.assertEqual(steps[0][1], "download_data.py")
         self.assertEqual(steps[1][1], "build_vector_db.py")
         self.assertEqual(steps[1][2], ())
         self.assertEqual(
             steps[2],
-            ("3/3 — clone WorFBench + deps de eval", "worfeval.py", ("--setup",)),
+            ("3/4 — clone WorFBench + deps de eval", "worfeval.py", ("--setup",)),
         )
+        self.assertEqual(steps[3][1], "setup_llama_cpp.py")
 
     def test_setup_steps_force_rag(self) -> None:
         steps = setup_steps(force_rag=True)
@@ -144,6 +145,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("download_data.py", proc.stdout)
         self.assertIn("build_vector_db.py", proc.stdout)
         self.assertIn("worfeval.py", proc.stdout)
+        self.assertIn("setup_llama_cpp.py", proc.stdout)
 
     def test_run_model_skip_sft_dry_run(self) -> None:
         proc = subprocess.run(

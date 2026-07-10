@@ -6,7 +6,7 @@ Pipeline enxuto. Parâmetro **`--model`** em tudo que envolve SLM (baixa um mode
 
 | Script | O que faz |
 |--------|-----------|
-| `setup_project.py` | **Setup único**: dados HF + índice RAG + WorFBench |
+| `setup_project.py` | **Setup único**: dados HF + índice RAG + WorFBench + llama.cpp |
 | `run_model.py --model ID` | **Pipeline do modelo**: download → Ollama → I0/RAG/SFT/SFT+RAG (infer + eval) |
 | `download_data.py` | Treino + teste (`data/test/<task>/`, **sem** `gold_traj/` aninhado) |
 | `download_model.py --model ID` | Um modelo HF (`models/<id>/`) |
@@ -38,18 +38,19 @@ Flags úteis: `--skip-download`, `--skip-finetune` (SFT já treinado), `--skip-s
 1. download_data.py
 2. download_model.py --model qwen35-4b
 3. build_vector_db.py
-4. finetune.py --model qwen35-4b --export-merged
-5. ollama_import.py --model qwen35-4b --run
-6. ollama_import.py --model qwen35-4b --finetuned --run
-7. infer.py --model qwen35-4b                       # I0
-8. infer.py --model qwen35-4b --rag                 # RAG
-9. infer.py --model qwen35-4b --finetuned           # SFT
-10. infer.py --model qwen35-4b --finetuned --rag
-11. worfeval.py --setup
-12. worfeval.py --model qwen35-4b --all-scenarios
+4. setup_llama_cpp.py          # GGUF (Granite/Nemotron); incluso no setup_project
+5. finetune.py --model qwen35-4b --export-merged
+6. ollama_import.py --model qwen35-4b --run
+7. ollama_import.py --model qwen35-4b --finetuned --run
+8. infer.py --model qwen35-4b                       # I0
+9. infer.py --model qwen35-4b --rag                 # RAG
+10. infer.py --model qwen35-4b --finetuned           # SFT
+11. infer.py --model qwen35-4b --finetuned --rag
+12. worfeval.py --setup
+13. worfeval.py --model qwen35-4b --all-scenarios
 ```
 
-(No atalho, os passos 7–10 rodam em paralelo: track base ‖ track SFT.)
+(No atalho, os passos 8–11 rodam em paralelo: track base ‖ track SFT.)
 
 ## Cenários (`infer.py`)
 
@@ -102,11 +103,12 @@ python scripts/ollama_import.py --model qwen35-0.8b --run
 # ou execute o comando impresso manualmente
 ```
 
-**Granite / Nemotron (GGUF automático):** se a arquitetura não for convertível pelo Ollama
-(`GraniteForCausalLM`, etc.), `ollama_import.py` clona `external/llama.cpp`, roda
-`convert_hf_to_gguf.py` e cria o modelo a partir do `.gguf` em `models/ollama/gguf/`.
+**Granite / Nemotron (GGUF):** o setup clona `external/llama.cpp`. No import, se a
+arquitetura exigir GGUF (`GraniteForCausalLM`, etc.), `ollama_import.py` só roda
+`convert_hf_to_gguf.py` e cria o modelo a partir de `models/ollama/gguf/`.
 
 ```bash
+python scripts/setup_llama_cpp.py   # ou setup_project.py (passo 4/4)
 python scripts/ollama_import.py --model granite-3b --run
 # opcional: outtype do convert (= --quantize na CLI)
 python scripts/ollama_import.py --model granite-3b --quantize q4_K_M --run

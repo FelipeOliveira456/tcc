@@ -174,6 +174,33 @@ class GgufConvertTests(unittest.TestCase):
             self.assertIn("[GGUF]", text)
             mock_convert.assert_called_once()
 
+    def test_convert_requires_setup_llama_cpp(self) -> None:
+        import tempfile
+
+        from tcc.backends.gguf_convert import convert_hf_dir_to_gguf
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            weights = root / "w"
+            weights.mkdir()
+            (weights / "model.safetensors").write_text("x", encoding="utf-8")
+            cfg = {
+                "_project_root": root,
+                "paths": {"project_root": str(root), "models_dir": str(root / "models")},
+                "inference": {
+                    "ollama": {
+                        "gguf": {
+                            "llama_cpp_dir": str(root / "missing-llama"),
+                            "outtype": "q4_K_M",
+                        }
+                    }
+                },
+            }
+            out = root / "out.gguf"
+            with self.assertRaises(FileNotFoundError) as ctx:
+                convert_hf_dir_to_gguf(cfg, weights, out)
+            self.assertIn("setup_llama_cpp", str(ctx.exception))
+
     def test_modelfile_uses_gguf_helper(self) -> None:
         import tempfile
 

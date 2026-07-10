@@ -95,7 +95,8 @@ def convert_script(llama_cpp: Path) -> Path:
     if not script.is_file():
         raise FileNotFoundError(
             f"convert_hf_to_gguf.py não encontrado em {llama_cpp}. "
-            "Rode ensure_llama_cpp ou clone o llama.cpp."
+            "Rode o setup: python scripts/setup_project.py "
+            "(ou python scripts/setup_llama_cpp.py)."
         )
     return script
 
@@ -111,7 +112,8 @@ def convert_hf_dir_to_gguf(
     """
     Converte diretório HF (safetensors) → arquivo .gguf.
 
-    Clona llama.cpp se preciso. Reusa outfile se já existir (salvo force=True).
+    Exige llama.cpp já clonado no setup (não clona aqui).
+    Reusa outfile se já existir (salvo force=True).
     """
     block = gguf_cfg(cfg)
     outtype = outtype or str(block.get("outtype", "q4_K_M"))
@@ -120,7 +122,7 @@ def convert_hf_dir_to_gguf(
         print(f"[gguf] reusando {outfile}", flush=True)
         return outfile
 
-    llama_cpp = ensure_llama_cpp(cfg)
+    llama_cpp = llama_cpp_dir(cfg)
     script = convert_script(llama_cpp)
     outfile.parent.mkdir(parents=True, exist_ok=True)
 
