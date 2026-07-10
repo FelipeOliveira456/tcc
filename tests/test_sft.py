@@ -296,6 +296,30 @@ def test_modelfile_qwen35_sft_builds_ollama_bundle(cfg, tmp_path: Path):
     assert "ADAPTER" not in text
 
 
+def test_modelfile_gemma_sft_uses_merged(cfg, tmp_path: Path):
+    base = cfg["_project_root"] / "models" / "gemma3-1b"
+    base.mkdir(parents=True)
+    (base / "model.safetensors").write_text("base", encoding="utf-8")
+    merged = cfg["_project_root"] / "checkpoints" / "gemma3-1b" / "merged"
+    merged.mkdir(parents=True)
+    (merged / "model.safetensors").write_text("merged", encoding="utf-8")
+    cfg_gemma = {
+        **cfg,
+        "models": {
+            "slm": [
+                {
+                    "id": "gemma3-1b",
+                    "hf_id": "google/gemma-3-1b-it",
+                    "sft_template": "gemma3",
+                }
+            ]
+        },
+    }
+    text = build_modelfile(cfg_gemma, "gemma3-1b", finetuned=True)
+    assert f"FROM {merged}" in text
+    assert "ADAPTER" not in text
+
+
 def test_modelfile_generation(cfg):
     text = build_modelfile(cfg, "qwen35-0.8b", finetuned=False)
     assert "FROM" in text

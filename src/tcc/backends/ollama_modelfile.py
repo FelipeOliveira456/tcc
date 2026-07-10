@@ -99,20 +99,27 @@ def resolve_weights_dir(
     return weights
 
 
-def resolve_finetuned_weights_dir(
+def resolve_finetuned_ollama_sources(
     cfg: dict[str, Any],
     model_id: str,
     *,
     adapter_dir: Path | None = None,
-) -> Path:
+) -> tuple[Path, Path | None]:
     if adapter_dir is not None:
-        raise ValueError(
-            "ADAPTER HF/PEFT não é suportado no Ollama para Qwen3.5. "
-            "Use finetune.py --export-merged (bundle ollama_sft é gerado automaticamente)."
-        )
+        if _is_qwen35(cfg, model_id):
+            raise ValueError(
+                "ADAPTER HF/PEFT não é suportado no Ollama para Qwen3.5. "
+                "Use finetune.py --export-merged (bundle ollama_sft é gerado automaticamente)."
+            )
+        base = model_dir(cfg, model_id)
+        if not base.is_dir() or not _has_safetensors_weights(base):
+            raise FileNotFoundError(
+                f"Base HF necessária em {base}. Rode download_model.py --model {model_id}."
+            )
+        return base, adapter_dir
     if _is_qwen35(cfg, model_id):
-        return build_qwen35_ollama_sft_bundle(cfg, model_id)
-    return resolve_weights_dir(cfg, model_id, finetuned=True)
+        return build_qwen35_ollama_sft_bundle(cfg, model_id), None
+    return resolve_weights_dir(cfg, model_id, finetuned=True), None
 
 
 def build_modelfile(
@@ -126,12 +133,17 @@ def build_modelfile(
     """Conteúdo do Modelfile (FROM pesos locais safetensors)."""
     ollama = cfg.get("inference", {}).get("ollama", {})
     temp = temperature if temperature is not None else float(ollama.get("temperature", 0.0))
+    adapter: Path | None = None
     if finetuned:
-        weights = resolve_finetuned_weights_dir(cfg, model_id, adapter_dir=adapter_dir)
+        weights, adapter = resolve_finetuned_ollama_sources(
+            cfg, model_id, adapter_dir=adapter_dir
+        )
     else:
         weights = resolve_weights_dir(cfg, model_id, finetuned=False)
     lines = [f"# TCC — {model_id}" + (" (SFT)" if finetuned else " (base)")]
     lines.append(f"FROM {weights}")
+    if adapter is not None:
+        lines.append(f"ADAPTER {adapter}")
     lines.append(f"PARAMETER temperature {temp}")
     return "\n".join(lines) + "\n"
 
