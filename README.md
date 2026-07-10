@@ -140,7 +140,14 @@ python scripts/ollama_import.py --model qwen35-0.8b --finetuned --run
 # → ollama create qwen35-0.8b-sft -f models/ollama/Modelfile.qwen35-0.8b-sft
 ```
 
-**Adapter LoRA sem merge** (Ollama aplica `ADAPTER` sobre o modelo base já criado):
+**SFT Qwen3.5:** use `finetune.py --export-merged`; o import monta `checkpoints/<id>/ollama_sft/` (merge + configs vision da base). Ollama **não** suporta `ADAPTER` PEFT no Qwen3.5.
+
+```bash
+python scripts/finetune.py --model qwen35-0.8b --export-merged
+python scripts/ollama_import.py --model qwen35-0.8b --finetuned --run
+```
+
+**Adapter LoRA** (só famílias suportadas pelo Ollama: Llama/Mistral/Gemma — não Qwen3.5):
 
 ```bash
 # base já deve existir: ollama list | grep qwen35-0.8b

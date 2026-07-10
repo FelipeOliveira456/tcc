@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -9,21 +11,67 @@ from tcc.config import resolve_path
 from tcc.models_registry import get_sft_template
 from tcc.paths import checkpoint_dir, model_dir
 
+# Sidecars multimodais que o merge Unsloth pode omitir (Ollama → image_mean).
+_QWEN35_OLLAMA_SIDECARS = (
+    "preprocessor_config.json",
+    "video_preprocessor_config.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "chat_template.jinja",
+    "generation_config.json",
+)
 
-def _has_lora_adapter(path: Path) -> bool:
-    return (path / "adapter_config.json").is_file() or (
-        path / "adapter_model.safetensors"
-    ).is_file()
 
-
-def _qwen35_prefers_adapter_import(cfg: dict[str, Any], model_id: str) -> bool:
-    """Merge Unsloth pode omitir metadados vision → Ollama quebra (image_mean)."""
+def _is_qwen35(cfg: dict[str, Any], model_id: str) -> bool:
     if model_id.startswith("qwen35"):
         return True
     try:
         return get_sft_template(cfg, model_id).startswith("qwen3_5")
     except KeyError:
         return False
+
+
+def _has_safetensors_weights(path: Path) -> bool:
+    return any(path.glob("*.safetensors"))
+
+
+def _patch_config_vision(base_config: Path, merged_config: Path) -> None:
+    if not base_config.is_file() or not merged_config.is_file():
+        return
+    base = json.loads(base_config.read_text(encoding="utf-8"))
+    merged = json.loads(merged_config.read_text(encoding="utf-8"))
+    for key in ("vision_config", "image_token_id", "video_token_id"):
+        if key in base and key not in merged:
+            merged[key] = base[key]
+    merged_config.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+
+
+def build_qwen35_ollama_sft_bundle(cfg: dict[str, Any], model_id: str) -> Path:
+    """Merge SFT + sidecars vision da base HF (Ollama não aceita ADAPTER no Qwen3.5)."""
+    base = model_dir(cfg, model_id)
+    merged = checkpoint_dir(cfg, model_id) / "merged"
+    if not merged.is_dir() or not _has_safetensors_weights(merged):
+        raise FileNotFoundError(
+            f"Merge SFT não encontrado em {merged}. "
+            f"Rode finetune.py --model {model_id} --export-merged."
+        )
+    if not base.is_dir() or not _has_safetensors_weights(base):
+        raise FileNotFoundError(
+            f"Base HF necessária em {base}. Rode download_model.py --model {model_id}."
+        )
+
+    out = checkpoint_dir(cfg, model_id) / "ollama_sft"
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(merged, out)
+    for name in _QWEN35_OLLAMA_SIDECARS:
+        src = base / name
+        if src.is_file():
+            shutil.copy2(src, out / name)
+    _patch_config_vision(base / "config.json", out / "config.json")
+    return out
 
 
 def resolve_weights_dir(
@@ -34,48 +82,37 @@ def resolve_weights_dir(
 ) -> Path:
     if finetuned:
         merged = checkpoint_dir(cfg, model_id) / "merged"
-        if merged.is_dir() and any(merged.iterdir()):
+        if merged.is_dir() and _has_safetensors_weights(merged):
             return merged
         ckpt = checkpoint_dir(cfg, model_id)
-        if ckpt.is_dir() and any(ckpt.iterdir()):
+        if ckpt.is_dir() and _has_safetensors_weights(ckpt):
             return ckpt
         raise FileNotFoundError(
             f"Checkpoint SFT não encontrado em {ckpt}. "
             "Rode finetune.py --export-merged e depois ollama_import.py --finetuned."
         )
     weights = model_dir(cfg, model_id)
-    if not weights.is_dir() or not any(weights.iterdir()):
+    if not weights.is_dir() or not _has_safetensors_weights(weights):
         raise FileNotFoundError(
             f"Pesos HF não encontrados em {weights}. Rode download_model.py --model {model_id}."
         )
     return weights
 
 
-def resolve_finetuned_ollama_sources(
+def resolve_finetuned_weights_dir(
     cfg: dict[str, Any],
     model_id: str,
     *,
     adapter_dir: Path | None = None,
-) -> tuple[Path, Path | None]:
-    """FROM + ADAPTER opcional para SFT no Ollama.
-
-    Qwen3.5: FROM base HF + ADAPTER LoRA (merge quebra vision no Ollama).
-    Outros: FROM merged/ckpt quando não há adapter explícito.
-    """
-    base = model_dir(cfg, model_id)
+) -> Path:
     if adapter_dir is not None:
-        return base, adapter_dir
-
-    ckpt = checkpoint_dir(cfg, model_id)
-    if _qwen35_prefers_adapter_import(cfg, model_id) and _has_lora_adapter(ckpt):
-        if not base.is_dir() or not any(base.iterdir()):
-            raise FileNotFoundError(
-                f"Base HF necessária para ADAPTER em {base}. "
-                f"Rode download_model.py --model {model_id}."
-            )
-        return base, ckpt
-
-    return resolve_weights_dir(cfg, model_id, finetuned=True), None
+        raise ValueError(
+            "ADAPTER HF/PEFT não é suportado no Ollama para Qwen3.5. "
+            "Use finetune.py --export-merged (bundle ollama_sft é gerado automaticamente)."
+        )
+    if _is_qwen35(cfg, model_id):
+        return build_qwen35_ollama_sft_bundle(cfg, model_id)
+    return resolve_weights_dir(cfg, model_id, finetuned=True)
 
 
 def build_modelfile(
@@ -86,20 +123,15 @@ def build_modelfile(
     adapter_dir: Path | None = None,
     temperature: float | None = None,
 ) -> str:
-    """Conteúdo do Modelfile (FROM pesos locais; ADAPTER opcional para LoRA)."""
+    """Conteúdo do Modelfile (FROM pesos locais safetensors)."""
     ollama = cfg.get("inference", {}).get("ollama", {})
     temp = temperature if temperature is not None else float(ollama.get("temperature", 0.0))
     if finetuned:
-        weights, adapter = resolve_finetuned_ollama_sources(
-            cfg, model_id, adapter_dir=adapter_dir
-        )
+        weights = resolve_finetuned_weights_dir(cfg, model_id, adapter_dir=adapter_dir)
     else:
         weights = resolve_weights_dir(cfg, model_id, finetuned=False)
-        adapter = adapter_dir
     lines = [f"# TCC — {model_id}" + (" (SFT)" if finetuned else " (base)")]
     lines.append(f"FROM {weights}")
-    if adapter is not None:
-        lines.append(f"ADAPTER {adapter}")
     lines.append(f"PARAMETER temperature {temp}")
     return "\n".join(lines) + "\n"
 

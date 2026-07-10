@@ -94,6 +94,7 @@ def cfg(tmp_path: Path):
     models = tmp_path / "models" / "qwen35-0.8b"
     models.mkdir(parents=True)
     (models / "config.json").write_text("{}", encoding="utf-8")
+    (models / "model.safetensors").write_text("base", encoding="utf-8")
 
     return {
         "_project_root": tmp_path,
@@ -266,21 +267,33 @@ def test_dry_run_finetune(cfg):
     assert manifest["hparams"]["mask"] == "last_assistant_only"
 
 
-def test_modelfile_qwen35_sft_uses_base_plus_adapter(cfg, tmp_path: Path):
+def test_modelfile_qwen35_sft_builds_ollama_bundle(cfg, tmp_path: Path):
+    from tcc.backends.ollama_modelfile import build_qwen35_ollama_sft_bundle
+
     base = cfg["_project_root"] / "models" / "qwen35-0.8b"
     base.mkdir(parents=True, exist_ok=True)
-    (base / "config.json").write_text("{}", encoding="utf-8")
+    (base / "config.json").write_text(
+        json.dumps({"vision_config": {"image_mean": [0.5, 0.5, 0.5]}}),
+        encoding="utf-8",
+    )
+    (base / "preprocessor_config.json").write_text("{}", encoding="utf-8")
+    (base / "model.safetensors").write_text("base", encoding="utf-8")
     ckpt = cfg["_project_root"] / "checkpoints" / "qwen35-0.8b"
-    ckpt.mkdir(parents=True)
-    (ckpt / "adapter_config.json").write_text("{}", encoding="utf-8")
     merged = ckpt / "merged"
-    merged.mkdir()
-    (merged / "model.safetensors").write_text("x", encoding="utf-8")
+    merged.mkdir(parents=True)
+    (merged / "model.safetensors").write_text("merged", encoding="utf-8")
+    (merged / "config.json").write_text("{}", encoding="utf-8")
+
+    bundle = build_qwen35_ollama_sft_bundle(cfg, "qwen35-0.8b")
+    assert bundle.name == "ollama_sft"
+    assert (bundle / "model.safetensors").read_text(encoding="utf-8") == "merged"
+    assert (bundle / "preprocessor_config.json").is_file()
+    cfg_out = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
+    assert "vision_config" in cfg_out
 
     text = build_modelfile(cfg, "qwen35-0.8b", finetuned=True)
-    assert f"FROM {base}" in text
-    assert f"ADAPTER {ckpt}" in text
-    assert "merged" not in text
+    assert f"FROM {bundle}" in text
+    assert "ADAPTER" not in text
 
 
 def test_modelfile_generation(cfg):
