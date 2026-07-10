@@ -94,7 +94,7 @@ def main() -> None:
         eval_types.append("graph")
 
     if not args.dry_run:
-        repo = ensure_worfbench(cfg)
+        repo = ensure_worfbench(cfg, install_deps=True)
         print(f"WorFBench: {repo}")
 
     if not args.skip_download:

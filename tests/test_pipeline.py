@@ -294,7 +294,8 @@ class PipelineTests(unittest.TestCase):
             root = Path(tmp)
             repo = root / "WorFBench"
             repo.mkdir()
-            (repo / "node_eval.py").write_text("# stub\n", encoding="utf-8")
+            (repo / "evaluator").mkdir()
+            (repo / "evaluator" / "graph_evaluator.py").write_text("# stub\n", encoding="utf-8")
             pred = root / "pred.json"
             pred.write_text("[]", encoding="utf-8")
             gold = root / "gold.json"
@@ -317,7 +318,7 @@ class PipelineTests(unittest.TestCase):
                         )
             cmd = mock_run.call_args[0][0]
             self.assertEqual(cmd[0], sys.executable)
-            self.assertTrue(str(cmd[1]).endswith("node_eval.py"))
+            self.assertTrue(str(cmd[1]).endswith("eval_workflow.py"))
 
 
 if __name__ == "__main__":
