@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 
 from tcc.paths import train_json, vector_db_dir
-from tcc.rag.index import example_to_text, load_train_examples
+from tcc.rag.index import last_assistant_message, last_user_message, load_train_examples
 
 
 @dataclass
@@ -36,7 +36,9 @@ def _sha256_file(path: Path) -> str:
 def build_deterministic_vector_db(cfg: dict[str, Any], *, force: bool = False) -> Path:
     """
     Índice determinístico:
-      - exemplos ordenados por (source, índice estável)
+      - 1 registro por exemplo de treino
+      - user/workflow = último par (tarefa real; demos few-shot ignorados)
+      - embedding = só a pergunta (último user); workflow só no prompt
       - seed fixo em config.rag.seed
       - metadados versionados em meta.json
     """
@@ -52,31 +54,33 @@ def build_deterministic_vector_db(cfg: dict[str, Any], *, force: bool = False) -
     train_hash = _sha256_file(train)
     emb_name = rag_cfg["embedding_model"]
     seed = int(rag_cfg.get("seed", 42))
-    fields = list(rag_cfg.get("chunk_fields", ["query", "workflow"]))
+    # Similaridade só na pergunta; workflow é metadado do prompt.
+    fields = list(rag_cfg.get("chunk_fields", ["query"]))
+    if fields != ["query"]:
+        fields = ["query"]
 
     if meta_path.exists() and index_path.exists() and not force:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        if meta.get("train_sha256") == train_hash and meta.get("embedding_model") == emb_name:
+        if (
+            meta.get("train_sha256") == train_hash
+            and meta.get("embedding_model") == emb_name
+            and meta.get("chunk_fields") == fields
+        ):
             return index_path
 
     raw = load_train_examples(train)
     records: list[dict[str, Any]] = []
     for i, item in enumerate(raw):
-        text = example_to_text(item, fields)
-        if not text:
+        user_msg = last_user_message(item)
+        workflow = last_assistant_message(item)
+        if not user_msg or not workflow:
             continue
         ex_id = f"{item.get('source', 'unknown')}::{item.get('id', i)}"
-        user_msg = ""
-        conv = item.get("messages") or item.get("conversations") or []
-        for turn in conv:
-            if turn.get("role") in ("user", "human"):
-                user_msg = turn.get("content", "")
-        workflow = example_to_text(item, ["workflow"])
         records.append(
             {
                 "id": ex_id,
                 "index": i,
-                "text": text,
+                "text": user_msg,  # texto embedado = pergunta
                 "user": user_msg,
                 "workflow": workflow,
                 "source": item.get("source"),
@@ -156,6 +160,7 @@ class VectorRetriever:
         return cls(records, matrix, meta, model)
 
     def retrieve(self, query: str, *, top_k: int | None = None) -> list[dict]:
+        """Recupera top-k por similaridade de cosseno entre perguntas."""
         k = top_k or self._meta.top_k
         q = self._model.encode([query], convert_to_numpy=True)[0]
         scores = self._matrix @ q / (

@@ -21,7 +21,7 @@ class VectorRetrieverTests(unittest.TestCase):
             embedding_model="test-model",
             seed=42,
             top_k=1,
-            chunk_fields=["query", "workflow"],
+            chunk_fields=["query"],
             train_sha256="abc",
             num_vectors=2,
         )

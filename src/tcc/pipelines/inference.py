@@ -117,10 +117,10 @@ def _prepare_rag_augmented_gold(
     augmented = []
     for item in data:
         conv = item.get("conversations", [])
-        user_text = next(
-            (c["content"] for c in conv if c.get("role") in ("user", "human")),
-            "",
-        )
+        user_text = ""
+        for c in conv:
+            if c.get("role") in ("user", "human"):
+                user_text = c.get("content", "")
         retrieved = retriever.retrieve(user_text)
         block = retriever.format_few_shot_block(retrieved)
         new_item = dict(item)

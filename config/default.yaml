@@ -84,7 +84,8 @@ models:
 rag:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
   top_k: 2
-  chunk_fields: [query, workflow]
+  # Similaridade só na pergunta (último user); workflow (último assistant) só no prompt
+  chunk_fields: [query]
   seed: 42
 
 sft:

@@ -28,21 +28,35 @@ def load_train_examples(train_json: Path) -> list[dict[str, Any]]:
     return data
 
 
+def _conversation(item: dict[str, Any]) -> list[dict[str, Any]]:
+    return item.get("conversations") or item.get("messages") or []
+
+
+def last_user_message(item: dict[str, Any]) -> str:
+    """Último turno user/human — pergunta real (após demos few-shot)."""
+    msg = ""
+    for turn in _conversation(item):
+        if turn.get("role") in ("user", "human"):
+            msg = turn.get("content", "")
+    return msg
+
+
+def last_assistant_message(item: dict[str, Any]) -> str:
+    """Último turno assistant/gpt — workflow ouro da tarefa real."""
+    msg = ""
+    for turn in _conversation(item):
+        if turn.get("role") in ("assistant", "gpt"):
+            msg = turn.get("content", "")
+    return msg
+
+
 def example_to_text(item: dict[str, Any], fields: list[str]) -> str:
-    parts: list[str] = []
-    conv = item.get("conversations") or item.get("messages") or []
-    user_msg = next(
-        (c.get("content", "") for c in conv if c.get("role") in ("user", "human")),
-        "",
-    )
-    asst_msg = next(
-        (c.get("content", "") for c in conv if c.get("role") in ("assistant", "gpt")),
-        "",
-    )
-    mapping = {"query": user_msg, "workflow": asst_msg}
-    for field in fields:
-        if field in mapping and mapping[field]:
-            parts.append(mapping[field])
+    """Extrai campos do último par user/assistant (não dos demos iniciais)."""
+    mapping = {
+        "query": last_user_message(item),
+        "workflow": last_assistant_message(item),
+    }
+    parts = [mapping[f] for f in fields if f in mapping and mapping[f]]
     return "\n".join(parts).strip()
 
 
@@ -57,31 +71,35 @@ def build_rag_index(
     """
     Persiste índice (embeddings + metadados) em index_dir/rag_index.pkl.
 
-    Na execução real, carrega SentenceTransformer e codifica o corpus.
+    Embedding usa só a pergunta (último user). Workflow (último assistant)
+    fica guardado para o prompt, mas não entra na similaridade.
     """
     from sentence_transformers import SentenceTransformer
 
     index_dir.mkdir(parents=True, exist_ok=True)
     model = SentenceTransformer(embedding_model_name)
     examples: list[RagExample] = []
-    texts: list[str] = []
+    # Similaridade = só query; se chunk_fields omitir query, cai no último user.
+    embed_fields = [f for f in chunk_fields if f == "query"] or ["query"]
 
     for i, item in enumerate(load_train_examples(train_json)):
-        text = example_to_text(item, chunk_fields)
-        if not text:
+        query = last_user_message(item)
+        workflow = last_assistant_message(item)
+        embed_text = example_to_text(item, embed_fields)
+        if not embed_text or not workflow:
             continue
         ex_id = str(item.get("id", i))
         task = item.get("task_type") or item.get("source")
         examples.append(
             RagExample(
                 example_id=ex_id,
-                query_text=text,
-                workflow_text=example_to_text(item, ["workflow"]),
+                query_text=query,
+                workflow_text=workflow,
                 task_type=str(task) if task else None,
             )
         )
-        texts.append(text)
 
+    texts = [e.query_text for e in examples]
     embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
     for ex, emb in zip(examples, embeddings, strict=True):
         ex.embedding = emb

@@ -238,8 +238,17 @@ Assim múltiplas rodadas não se sobrescrevem.
 ## RAG determinístico
 
 - Embedding fixo em `config/default.yaml` (`rag.embedding_model`, `rag.seed`)
+- Por exemplo de treino: **último user** (pergunta real) + **último assistant** (workflow ouro)
+- Similaridade = só a pergunta; o workflow vai no prompt, mas **não** no vetor
+- System e demos few-shot do treino **não** entram no índice
 - Exemplos ordenados por `id` estável antes de embedar
-- `meta.json` com hash do treino — não reconstrói se o treino não mudou
+- `meta.json` com hash do treino + `chunk_fields` — reconstrói se mudarem
+
+Após mudar a lógica do RAG, reconstrua o índice:
+
+```bash
+python scripts/build_vector_db.py --force
+```
 
 ## WorFEval (como funciona)
 
