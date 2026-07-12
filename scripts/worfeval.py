@@ -14,7 +14,7 @@ Como funciona o WorFEval
 3. Este script chama node_eval.py --task eval_workflow do repo WorFBench:
    - Embute nós/arestas do workflow predito e do gold
    - Usa sentence-transformers (all-mpnet-base-v2) para alinhar nós
-   - Calcula precision / recall / F1 (modo node ou graph)
+   - Calcula precision / recall / F1 em modo node (chain/f1chain) e/ou graph (f1graph)
 
 4. Métricas salvas em:
      outputs/eval_results/<model>/<task>/<cenário>_{node|graph}.json
@@ -22,9 +22,10 @@ Como funciona o WorFEval
 Uso típico
 ----------
   python scripts/worfeval.py --setup          # só clona WorFBench
-  python scripts/worfeval.py --model qwen35-4b                    # avalia I0, todas tarefas
+  python scripts/worfeval.py --model qwen35-4b                    # I0, chain+graph
   python scripts/worfeval.py --model qwen35-4b --rag --finetuned # SFT+RAG
-  python scripts/worfeval.py --model qwen35-4b --all-scenarios   # i0,rag,sft,sft_rag
+  python scripts/worfeval.py --model qwen35-4b --all-scenarios   # 4 cenários × chain+graph
+  python scripts/worfeval.py --model qwen35-4b --eval-type node  # só chain (f1chain)
 """
 
 from __future__ import annotations
@@ -65,7 +66,12 @@ def main() -> None:
         help="Avalia i0, rag, sft, sft_rag (ignora flags --rag/--finetuned)",
     )
     parser.add_argument("--task", default=None)
-    parser.add_argument("--eval-type", choices=["node", "graph"], default="node")
+    parser.add_argument(
+        "--eval-type",
+        choices=["node", "graph", "both"],
+        default="both",
+        help="node=chain (f1chain), graph=f1graph, both=os dois (padrão)",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -97,6 +103,13 @@ def main() -> None:
     else:
         scenarios = [(args.finetuned, args.rag)]
 
+    if args.eval_type == "both":
+        eval_types = list(
+            cfg.get("worfbench", {}).get("eval_types", ["node", "graph"])
+        )
+    else:
+        eval_types = [args.eval_type]
+
     for finetuned, rag in scenarios:
         for task in tasks:
             pred = latest_prediction_path(
@@ -105,16 +118,20 @@ def main() -> None:
             if not pred.exists():
                 print(f"[skip] sem predição: {pred}")
                 continue
-            out = run_eval_task(
-                cfg,
-                model_id=args.model,
-                task=task,
-                finetuned=finetuned,
-                rag=rag,
-                eval_type=args.eval_type,
-                dry_run=args.dry_run,
-            )
-            print(f"{'[dry-run] ' if args.dry_run else ''}{task} ({pred.name}) -> {out}")
+            for eval_type in eval_types:
+                out = run_eval_task(
+                    cfg,
+                    model_id=args.model,
+                    task=task,
+                    finetuned=finetuned,
+                    rag=rag,
+                    eval_type=eval_type,
+                    dry_run=args.dry_run,
+                )
+                print(
+                    f"{'[dry-run] ' if args.dry_run else ''}"
+                    f"{task}/{eval_type} ({pred.name}) -> {out}"
+                )
 
 
 if __name__ == "__main__":

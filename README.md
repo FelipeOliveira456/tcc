@@ -269,8 +269,11 @@ python scripts/build_vector_db.py --force
 
 1. **`infer.py`** grava, por tarefa, um JSON com lista `{query, workflow}`.
 2. **`worfeval.py`** chama `external/WorFBench/node_eval.py --task eval_workflow` sobre a predição mais recente (com stamp).
-3. Compara predição vs `data/test/<task>/graph_eval.json` com **sentence-transformers** + matching de grafo.
-4. Saída: precision, recall, F1 em `outputs/eval_results/`.
+3. Compara predição vs `data/test/<task>/graph_eval.json` com **sentence-transformers** + matching.
+4. Por padrão gera **dois** resultados (como no paper):
+   - `*_node.json` → chain / **f1chain** (ordem dos nós)
+   - `*_graph.json` → graph / **f1graph** (nós + arestas)
+5. Saída em `outputs/eval_results/`. Só chain: `--eval-type node` ou `run_model.py --eval-node-only`.
 
 Não usa Ollama/LangChain na avaliação.
 

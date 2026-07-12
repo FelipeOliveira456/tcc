@@ -61,7 +61,12 @@ def main() -> None:
     parser.add_argument(
         "--eval-graph",
         action="store_true",
-        help="Além de node, roda WorFEval em modo graph",
+        help="(Compat) Força incluir graph; já é o padrão via worfbench.eval_types",
+    )
+    parser.add_argument(
+        "--eval-node-only",
+        action="store_true",
+        help="Só WorFEval chain/node (sem graph); mais rápido",
     )
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument(
@@ -89,8 +94,13 @@ def main() -> None:
     cfg = load_config(args.config)
     get_model_spec(cfg, args.model)
 
-    eval_types = ["node"]
-    if args.eval_graph:
+    # Padrão = config (node + graph = chain + graph do paper).
+    eval_types = list(
+        cfg.get("worfbench", {}).get("eval_types", ["node", "graph"])
+    )
+    if args.eval_node_only:
+        eval_types = ["node"]
+    elif args.eval_graph and "graph" not in eval_types:
         eval_types.append("graph")
 
     if not args.dry_run:
