@@ -74,11 +74,15 @@ def run_inference(
     """
     generate_fn(messages, model_id, finetuned) -> texto do workflow predito.
     Grava um JSON por tarefa no formato esperado pelo WorFEval.
+
+    Se generate_fn falhar em um exemplo, grava workflow vazio (F1=0 no eval)
+    e segue para o próximo — a task não aborta.
     """
     task_list = tasks or list_test_tasks(cfg)
     stamp = run_stamp()
     started_at = utc_now_iso()
     outputs: dict[str, str] = {}
+    skip_counts: dict[str, int] = {}
     retriever = VectorRetriever.from_config(cfg) if use_rag else None
 
     for task in task_list:
@@ -87,17 +91,27 @@ def run_inference(
             gold_data = json.load(f)
 
         preds = []
+        skipped_errors = 0
         subset = gold_data[:limit] if limit else gold_data
         desc = f"{progress_desc_prefix}{task} ({model_id})".strip()
         tqdm_kwargs: dict[str, Any] = {"desc": desc, "unit": "ex", "dynamic_ncols": True}
         if progress_position is not None:
             tqdm_kwargs["position"] = progress_position
             tqdm_kwargs["leave"] = True
-        for item in tqdm(subset, **tqdm_kwargs):
+        for i, item in enumerate(tqdm(subset, **tqdm_kwargs)):
             messages = build_prompt_messages(
                 item, use_rag=use_rag, cfg=cfg, retriever=retriever
             )
-            workflow = generate_fn(messages, model_id, finetuned)
+            try:
+                workflow = generate_fn(messages, model_id, finetuned)
+            except Exception as exc:
+                # Workflow vazio → unparseable no WorFEval → conta como 0 na média.
+                skipped_errors += 1
+                workflow = ""
+                print(
+                    f"[skip infer] {task} exemplo {i}: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
             preds.append({"query": item, "workflow": workflow})
 
         out = prediction_path(
@@ -107,6 +121,13 @@ def run_inference(
         with out.open("w", encoding="utf-8") as f:
             json.dump(preds, f, indent=2, ensure_ascii=False)
         outputs[task] = str(out)
+        if skipped_errors:
+            print(
+                f"[warn] {task}: {skipped_errors}/{len(subset)} exemplos "
+                "com erro de inferência (workflow vazio → F1=0)",
+                flush=True,
+            )
+            skip_counts[task] = skipped_errors
 
     finished_at = utc_now_iso()
     meta_path = inference_run_meta_path(cfg, model_id, stamp)
@@ -123,6 +144,7 @@ def run_inference(
                 "limit": limit,
                 "tasks": task_list,
                 "predictions": outputs,
+                "skipped_errors": skip_counts,
             },
             f,
             indent=2,

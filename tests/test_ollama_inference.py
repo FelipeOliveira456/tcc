@@ -123,6 +123,74 @@ class OllamaInferenceTests(unittest.TestCase):
         self.assertNotIn("Exemplos recuperados", system)
         self.assertNotIn("Pergunta:", system)
 
+    def test_run_inference_skips_failed_example(self) -> None:
+        import tempfile
+
+        from tcc.inference.runner import run_inference
+
+        gold_item = {
+            "conversations": [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "task"},
+                {"role": "assistant", "content": "Node:\n1: a\nEdge: (START,1) (1,END)"},
+            ]
+        }
+
+        def generate(messages, model_id, finetuned):
+            user = messages[-1]["content"]
+            if user == "fail":
+                raise RuntimeError("Ollama HTTP 500: peg-native")
+            return "Node:\n1: ok\nEdge: (START,1) (1,END)"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            task_dir = root / "data" / "test" / "toy"
+            task_dir.mkdir(parents=True)
+            gold = [
+                {**gold_item, "conversations": [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "ok1"},
+                    {"role": "assistant", "content": "Node:\n1: a\nEdge: (START,1) (1,END)"},
+                ]},
+                {**gold_item, "conversations": [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "fail"},
+                    {"role": "assistant", "content": "Node:\n1: a\nEdge: (START,1) (1,END)"},
+                ]},
+                {**gold_item, "conversations": [
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "ok2"},
+                    {"role": "assistant", "content": "Node:\n1: a\nEdge: (START,1) (1,END)"},
+                ]},
+            ]
+            (task_dir / "graph_eval.json").write_text(
+                json.dumps(gold), encoding="utf-8"
+            )
+            cfg = {
+                "_project_root": root,
+                "paths": {
+                    "data_dir": "data",
+                    "outputs_dir": "outputs",
+                },
+            }
+            out = run_inference(
+                cfg,
+                "toy-model",
+                finetuned=False,
+                use_rag=False,
+                generate_fn=generate,
+                tasks=["toy"],
+            )
+            preds = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(len(preds), 3)
+            self.assertTrue(preds[0]["workflow"])
+            self.assertEqual(preds[1]["workflow"], "")
+            self.assertTrue(preds[2]["workflow"])
+            stamp = out.name.removeprefix("graph_eval_i0_").removesuffix(".json")
+            meta_path = root / "outputs" / "predictions" / "toy-model" / f"run_{stamp}.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(meta["skipped_errors"], {"toy": 1})
+
 
 if __name__ == "__main__":
     unittest.main()
