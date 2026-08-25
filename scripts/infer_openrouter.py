@@ -3,7 +3,6 @@
 
 Exemplos:
   python scripts/infer_openrouter.py
-  python scripts/infer_openrouter.py --rag
   python scripts/infer_openrouter.py --task toolbench --limit 5
 
 Requer OPENROUTER_API_KEY no ambiente ou em .env na raiz do projeto.
@@ -97,7 +96,6 @@ def main() -> None:
         "--model",
         default=os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL),
     )
-    parser.add_argument("--rag", action="store_true")
     parser.add_argument("--task", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max-tokens", type=int, default=4096)
@@ -125,7 +123,7 @@ def main() -> None:
         cfg,
         "glm-5.2-openrouter",
         finetuned=False,
-        use_rag=args.rag,
+        use_rag=False,
         generate_fn=generate,
         tasks=[args.task] if args.task else None,
         limit=args.limit,
