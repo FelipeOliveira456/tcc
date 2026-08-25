@@ -56,6 +56,7 @@ def _chat_completion(
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        "reasoning": {"enabled": False},
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
