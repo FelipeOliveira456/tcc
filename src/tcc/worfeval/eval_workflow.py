@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,16 @@ def _real_nodes(graph: dict[str, Any] | list) -> list[str]:
     return [n for n in nodes if n not in ("START", "END")]
 
 
+def _tolerant_workflow_parser(parser):
+    """Aceita tanto `1.Texto` quanto `1. Texto` nas linhas de nós."""
+
+    def parse(workflow: str):
+        normalized = re.sub(r"(?m)^(\s*\d+[:.])(?=\S)", r"\1 ", workflow)
+        return parser(normalized)
+
+    return parse
+
+
 def _load_worfbench_eval(repo: Path):
     repo = repo.resolve()
     if str(repo) not in sys.path:
@@ -33,7 +44,7 @@ def _load_worfbench_eval(repo: Path):
     from evaluator.graph_evaluator import t_eval_graph, t_eval_nodes
     from node_eval import workflow_to_graph_list
 
-    return workflow_to_graph_list, t_eval_nodes, t_eval_graph
+    return _tolerant_workflow_parser(workflow_to_graph_list), t_eval_nodes, t_eval_graph
 
 
 def eval_workflow(

@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from tcc.worfeval.eval_workflow import eval_workflow
+from tcc.worfeval.eval_workflow import _tolerant_workflow_parser, eval_workflow
 
 
 @pytest.fixture
@@ -58,3 +58,15 @@ def test_skips_empty_pred_without_crash(tmp_path: Path, worfbench_repo: Path) ->
     assert result["f1_score"] == 0.0
     saved = json.loads(out_path.read_text(encoding="utf-8"))
     assert saved["n_skipped_unparseable"] == 3
+
+
+def test_tolerant_parser_accepts_number_without_space() -> None:
+    def fake_parser(workflow: str) -> str:
+        return workflow
+
+    parser = _tolerant_workflow_parser(fake_parser)
+    workflow = "Node:\n1.First step\n2:Second step\n3. Third step\nvalue 2.5"
+
+    assert parser(workflow) == (
+        "Node:\n1. First step\n2: Second step\n3. Third step\nvalue 2.5"
+    )
