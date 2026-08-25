@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inferência do WorFBench via OpenRouter (por padrão, Moonshot Kimi K3).
+"""Inferência do WorFBench via OpenRouter (por padrão, Z.ai GLM 5.2).
 
 Exemplos:
   python scripts/infer_openrouter.py
@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from tcc.config import load_config
 from tcc.inference.runner import run_inference
 
-DEFAULT_MODEL = "moonshotai/kimi-k3"
+DEFAULT_MODEL = "z-ai/glm-5.2"
 DEFAULT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -123,7 +123,7 @@ def main() -> None:
 
     out = run_inference(
         cfg,
-        "kimi-k3-openrouter",
+        "glm-5.2-openrouter",
         finetuned=False,
         use_rag=args.rag,
         generate_fn=generate,
