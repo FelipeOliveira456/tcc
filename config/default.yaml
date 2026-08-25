@@ -99,6 +99,10 @@ models:
       hf_id: Qwen/Qwen3.5-27B
       sft_template: qwen3_5_nothink
       scenarios: [i0]
+    # Alias usado apenas pelo WorFEval para predições geradas via OpenRouter.
+    - id: glm-5.2-openrouter
+      hf_id: z-ai/glm-5.2
+      scenarios: [i0]
 
 rag:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2

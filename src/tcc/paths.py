@@ -78,6 +78,8 @@ def latest_prediction_path(
     """Predição mais recente com marcador de tempo; senão o caminho sem stamp."""
     name = scenario_name(finetuned=finetuned, rag=rag)
     base = resolve_path(cfg, "outputs_dir") / "predictions" / model_id / task
+    if not base.is_dir():
+        return prediction_path(cfg, model_id, finetuned=finetuned, rag=rag, task=task)
     stamped = [
         p
         for p in base.iterdir()
