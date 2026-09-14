@@ -1,4 +1,10 @@
-# TCC — WorFBench
+# Small Language Models na Geração de Workflows Agênticos
+
+Código do experimento do artigo *Small Language Models na Geração de Workflows Agênticos: Uma Avaliação Empírica no WorFBench* (Felipe Geraldo de Oliveira e Denilson Alves Pereira, DCC/UFLA).
+
+Repositório: [github.com/FelipeOliveira456/tcc](https://github.com/FelipeOliveira456/tcc)
+
+Seis SLMs de até 4B (Qwen 3.5 0,8B/2B/4B, Granite 4.1 3B, Gemma 3 1B, Ministral 3 3B) são avaliados no [WorFBench](https://github.com/zjunlp/WorFBench) em I0, RAG, SFT e SFT+RAG. A *baseline* não-SLM é o **GLM 5.2** (OpenRouter), só em I0 e RAG.
 
 Pipeline enxuto. Parâmetro **`--model`** em tudo que envolve SLM (baixa um modelo por vez).
 
@@ -12,8 +18,9 @@ Pipeline enxuto. Parâmetro **`--model`** em tudo que envolve SLM (baixa um mode
 | `download_model.py --model ID` | Um modelo HF (`models/<id>/`) |
 | `ollama_import.py --model ID` | Gera Modelfile + comando `ollama create` |
 | `build_vector_db.py` | BD vetorial RAG **determinístico** (`data/rag_index/`) |
-| `finetune.py --model ID` | QLoRA (treina; `--dry-run` só gera YAML) |
-| `infer.py --model ID [--rag] [--finetuned]` | Gera predições para o teste |
+| `finetune.py --model ID` | LoRA BF16 via Unsloth (`--dry-run` só gera YAML) |
+| `infer.py --model ID [--rag] [--finetuned]` | Inferência local (Ollama) |
+| `infer_openrouter.py [--rag]` | Inferência da *baseline* GLM 5.2 (API) |
 | `worfeval.py --setup` / `--model ID` | Clone WorFBench + métricas WorFEval |
 
 Rodar o script **já executa** a ação. Use `--dry-run` só para inspecionar caminhos/comandos sem fazer nada.
@@ -281,24 +288,33 @@ Não usa Ollama/LangChain na avaliação.
 
 Apelido **sem ponto** (seguro no bash). Nome oficial no HF pode ter ponto (ex.: **Qwen3.5** → `Qwen/Qwen3.5-4B`).
 
-| `--model` | Hugging Face | Família |
-|-----------|--------------|---------|
-| `granite-3b` | [ibm-granite/granite-4.1-3b](https://huggingface.co/ibm-granite/granite-4.1-3b) | Granite 4.1 ~3B |
-| `qwen35-0.8b` | [Qwen/Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B) | Qwen3.5 0,8B |
-| `qwen35-2b` | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B) | Qwen3.5 2B |
-| `qwen35-4b` | [Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | Qwen3.5 4B |
-| `gemma3-1b` | [google/gemma-3-1b-it](https://huggingface.co/google/gemma-3-1b-it) | Gemma 3 1B (licença Google no HF) |
-| `gemma3-4b` | [google/gemma-3-4b-it](https://huggingface.co/google/gemma-3-4b-it) | Gemma 3 4B |
-| `ministral-3-3b` | [mistralai/Ministral-3-3B-Instruct-2512-BF16](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-BF16) | Ministral 3 3B (BF16; texto no WorFBench) |
-| `nemotron-nano-4b` | [nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16) | Nemotron 3 Nano 4B (híbrido) |
+Modelos **usados no artigo**:
+
+| `--model` | Origem | Cenários |
+|-----------|--------|----------|
+| `qwen35-0.8b` | [Qwen/Qwen3.5-0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B) | I0, RAG, SFT, SFT+RAG |
+| `qwen35-2b` | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B) | I0, RAG, SFT, SFT+RAG |
+| `qwen35-4b` | [Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | I0, RAG, SFT, SFT+RAG |
+| `granite-3b` | [ibm-granite/granite-4.1-3b](https://huggingface.co/ibm-granite/granite-4.1-3b) | I0, RAG, SFT, SFT+RAG |
+| `gemma3-1b` | [google/gemma-3-1b-it](https://huggingface.co/google/gemma-3-1b-it) | I0, RAG, SFT, SFT+RAG |
+| `ministral-3-3b` | [mistralai/Ministral-3-3B-Instruct-2512-BF16](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-BF16) | I0, RAG, SFT, SFT+RAG |
+| `glm-5.2-openrouter` | [z-ai/glm-5.2](https://huggingface.co/zai-org/GLM-5.2) via OpenRouter | **I0 e RAG** |
 
 Exemplo: `python scripts/download_model.py --model qwen35-4b`
 
-### Baseline fora do recorte SLM
+Aliases ainda no `config/default.yaml`, **não avaliados no artigo**: `gemma3-4b`, `nemotron-nano-4b`, `qwen35-27b`.
 
-| `--model` | Hugging Face | Cenários |
-|-----------|--------------|----------|
-| `qwen35-27b` | [Qwen/Qwen3.5-27B](https://huggingface.co/Qwen/Qwen3.5-27B) | Apenas **I0** |
+## Baseline GLM 5.2 (OpenRouter)
+
+Não passa pelo Ollama. Copie `.env.example` para `.env` e preencha `OPENROUTER_API_KEY`.
+
+```bash
+python scripts/infer_openrouter.py            # I0
+python scripts/infer_openrouter.py --rag      # RAG (k=2, mesmo índice das SLMs)
+python scripts/worfeval.py --model glm-5.2-openrouter --all-scenarios
+```
+
+Temperatura 0, raciocínio desligado. Falha de API em um exemplo grava *workflow* vazio (`F1 = 0`). Uma camada local normaliza `1.Texto` → `1. Texto` antes do parser do WorFEval, sem alterar o repositório upstream.
 
 ## Setup
 
@@ -325,4 +341,12 @@ Se o `pip install -r requirements-sft.txt` falhar no LabRI, tente:
 pip install "unsloth" "unsloth_zoo" "bitsandbytes>=0.45.0"
 ```
 
-Mais detalhes (Ollama, LangChain, SFT): [`docs/stack.md`](docs/stack.md).
+Mais detalhes (Ollama, SFT): [`docs/stack.md`](docs/stack.md).
+
+## Dados
+
+Treino e teste: [`zjunlp/WorFBench_train`](https://huggingface.co/datasets/zjunlp/WorFBench_train) e [`zjunlp/WorFBench_test`](https://huggingface.co/datasets/zjunlp/WorFBench_test). Avaliador oficial: [zjunlp/WorFBench](https://github.com/zjunlp/WorFBench).
+
+## Licença
+
+Código deste repositório: use livremente para reproduzir o experimento. Pesos e dados seguem as licenças originais (Hugging Face / WorFBench). Não versione `.env` nem chaves de API.

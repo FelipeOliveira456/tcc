@@ -4,7 +4,8 @@
 
 | Artefato | Papel |
 |----------|--------|
-| `scripts/05_run_fewshot_rag.py` / `run_model.py` | I0 / RAG — gera predições |
+| `scripts/infer.py` / `scripts/run_model.py` | I0 / RAG / SFT / SFT+RAG — gera predições (Ollama) |
+| `scripts/infer_openrouter.py` | I0 / RAG da *baseline* GLM 5.2 |
 | `scripts/finetune.py` | SFT Unsloth |
 | `src/tcc/finetune/unsloth_sft.py` | bf16 LoRA, loss só no último assistant, merge 16-bit |
 | `src/tcc/finetune/sft.py` | Orquestra prepare dataset + Unsloth |
@@ -14,7 +15,7 @@
 
 | Artefato | Biblioteca |
 |----------|------------|
-| `scripts/04_build_rag_index.py` | **`sentence-transformers`** + numpy |
+| `scripts/build_vector_db.py` | **`sentence-transformers`** + numpy |
 | `src/tcc/rag/` | Pickle + similaridade coseno (sem LangChain) |
 
 ---
