@@ -1,40 +1,40 @@
-# Stack do TCC — treino, inferência, RAG, avaliação
+# TCC stack — training, inference, RAG, evaluation
 
-## Papéis no pipeline
+## Roles in the pipeline
 
-| Artefato | Papel |
-|----------|--------|
-| `scripts/infer.py` / `scripts/run_model.py` | I0 / RAG / SFT / SFT+RAG — gera predições (Ollama) |
-| `scripts/infer_openrouter.py` | I0 / RAG da *baseline* GLM 5.2 |
-| `scripts/finetune.py` | SFT Unsloth |
-| `src/tcc/finetune/unsloth_sft.py` | bf16 LoRA, loss só no último assistant, merge 16-bit |
-| `src/tcc/finetune/sft.py` | Orquestra prepare dataset + Unsloth |
-| WorFBench `LLM/localLLM.py` | Cliente HTTP estilo OpenAI → API local (no paper: LLaMA-Factory) |
+| Artifact | Role |
+|----------|------|
+| `scripts/infer.py` / `scripts/run_model.py` | I0 / RAG / SFT / SFT+RAG — writes predictions (Ollama) |
+| `scripts/infer_openrouter.py` | I0 / RAG for the GLM 5.2 baseline |
+| `scripts/finetune.py` | Unsloth SFT |
+| `src/tcc/finetune/unsloth_sft.py` | bf16 LoRA, loss only on the last assistant turn, 16-bit merge |
+| `src/tcc/finetune/sft.py` | Orchestrates dataset preparation + Unsloth |
+| WorFBench `LLM/localLLM.py` | OpenAI-style HTTP client → local API (in the paper: LLaMA-Factory) |
 
-### RAG (índice)
+### RAG (index)
 
-| Artefato | Biblioteca |
-|----------|------------|
+| Artifact | Library |
+|----------|---------|
 | `scripts/build_vector_db.py` | **`sentence-transformers`** + numpy |
-| `src/tcc/rag/` | Pickle + similaridade coseno (sem LangChain) |
+| `src/tcc/rag/` | Pickle + cosine similarity (no LangChain) |
 
 ---
 
-## Ollama + LangChain — onde cada um serve
+## Ollama + LangChain — where each one is used
 
 ```text
                     ┌─────────────────────────────────────┐
-                    │  Seu pipeline TCC (4 cenários)       │
+                    │  This TCC pipeline (4 settings)      │
                     └─────────────────────────────────────┘
          │                    │                    │
          ▼                    ▼                    ▼
    ┌───────────┐      ┌──────────────┐     ┌─────────────────┐
-   │  SFT      │      │  Inferência  │     │  Avaliação      │
-   │  (treino) │      │  (gerar WF)  │     │  (WorFEval)     │
+   │  SFT      │      │  Inference   │     │  Evaluation     │
+   │  (train)  │      │  (write WF)  │     │  (WorFEval)     │
    └───────────┘      └──────────────┘     └─────────────────┘
          │                    │                    │
-   ❌ Ollama            ✅ Ollama (opc.)      ❌ Ollama
-   ❌ LangChain         ✅ LangChain (opc.)   ❌ LangChain
+   ❌ Ollama            ✅ Ollama (opt.)      ❌ Ollama
+   ❌ LangChain         ✅ LangChain (opt.)   ❌ LangChain
    ✅ Unsloth            ✅ Ollama API          ✅ node_eval.py
                          / ChatOllama            + sentence-
                                                  transformers
@@ -42,45 +42,45 @@
 
 ### Ollama
 
-| Uso | Adequado? |
+| Use | Suitable? |
 |-----|-----------|
-| **Inferência** local (I0, SFT, RAG após exportar modelo) | Sim |
-| **SFT** no WorFBench (~18k × 7 msgs) | **Não** — Ollama não substitui treino com gradiente |
-| **WorFEval (métricas)** | Não — precisa dos JSONs de predição + `eval_workflow` |
+| Local **inference** (I0, SFT, RAG after exporting the model) | Yes |
+| **SFT** on WorFBench (~18k × 7 messages) | **No** — Ollama does not replace gradient training |
+| **WorFEval (metrics)** | No — it needs the prediction JSONs + `eval_workflow` |
 
 ### LangChain
 
-| Uso | Adequado? |
+| Use | Suitable? |
 |-----|-----------|
-| **Orquestrar RAG** (retriever + montar prompt + `ChatOllama`) | Sim, opcional |
-| **Substituir WorFEval** | Não |
-| **Treinar SFT** | Não — use Unsloth |
+| **Orchestrate RAG** (retriever + prompt assembly + `ChatOllama`) | Yes, optional |
+| **Replace WorFEval** | No |
+| **Train SFT** | No — use Unsloth |
 
 ---
 
-## Stack recomendada
+## Recommended stack
 
-| Fase | Recomendação | Motivo |
-|------|--------------|--------|
-| **Treino SFT** | **Unsloth** | GPU 24 GB, bf16 LoRA, 1 época, loss no último assistant |
-| **RAG** | `sentence-transformers` **ou** LangChain + mesmo embedder | |
-| **Inferência SLM** | **Ollama** após export | |
-| **Avaliação (teste)** | **Sempre** `node_eval.py eval_workflow` | Métricas oficiais |
+| Stage | Recommendation | Reason |
+|-------|----------------|--------|
+| **SFT training** | **Unsloth** | 24 GB GPU, bf16 LoRA, 1 epoch, loss on the last assistant turn |
+| **RAG** | `sentence-transformers` **or** LangChain + the same embedder | |
+| **SLM inference** | **Ollama** after export | |
+| **Evaluation (test)** | **Always** `node_eval.py eval_workflow` | Official metrics |
 
 ```text
-Unsloth               →  SFT (bf16 LoRA, 1 época, loss na 7ª msg)
-LangChain + Ollama    →  inferência + RAG
-node_eval (WorFBench) →  avaliação
-sentence-transformers →  índice RAG + métricas WorFEval
+Unsloth               →  SFT (bf16 LoRA, 1 epoch, loss on message 7)
+LangChain + Ollama    →  inference + RAG
+node_eval (WorFBench) →  evaluation
+sentence-transformers →  RAG index + WorFEval metrics
 ```
 
 ---
 
-## Formato de treino
+## Training format
 
-- **6 primeiras mensagens** = contexto (system + 2×(user, assistant) + user final).
-- **7ª mensagem** = alvo com loss (workflow ouro).
-- Implementação: `unsloth_sft.build_masked_example`.
+- **First 6 messages** = context (system + 2×(user, assistant) + final user).
+- **7th message** = target with loss (gold workflow).
+- Implementation: `unsloth_sft.build_masked_example`.
 
 ---
 
